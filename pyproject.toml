@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pi-face-greeter"
+version = "0.1.0"
+description = "Raspberry Pi face recognition greeter"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "PyYAML>=6.0",
+    "numpy>=1.24",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-mock>=3.12",
+]
+
+[project.scripts]
+pi-face-greeter = "pi_face_greeter.main:main"
+pi-face-greeter-validate-step1 = "pi_face_greeter.validate_step1:main"
+pi-face-greeter-greet-once = "pi_face_greeter.greet_once:main"
+pi-face-greeter-test-camera = "pi_face_greeter.cli:test_camera"
+pi-face-greeter-test-tts = "pi_face_greeter.cli:test_tts"
+pi-face-greeter-test-pir = "pi_face_greeter.cli:test_pir"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "hardware: requires Raspberry Pi hardware",
+]

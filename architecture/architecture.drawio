@@ -1,0 +1,160 @@
+<mxfile host="app.diagrams.net" agent="pi-face-greeter" version="24.7.17">
+  <diagram id="architecture" name="Pi Face Greeter Architecture">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- Mac Development -->
+        <mxCell id="mac_group" value="Mac Development" style="swimlane;horizontal=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="40" y="40" width="260" height="200" as="geometry" />
+        </mxCell>
+        <mxCell id="mac_dev" value="Edit code&#xa;src/pi_face_greeter/" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="mac_group">
+          <mxGeometry x="30" y="40" width="200" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="mac_pytest" value="pytest&#xa;(unit tests)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="mac_group">
+          <mxGeometry x="30" y="110" width="200" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="mac_push" value="git push" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="mac_group">
+          <mxGeometry x="30" y="170" width="200" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- Pi Deployment -->
+        <mxCell id="pi_deploy_group" value="Raspberry Pi 5 Deploy" style="swimlane;horizontal=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="340" y="40" width="260" height="200" as="geometry" />
+        </mxCell>
+        <mxCell id="pi_pull" value="git pull" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="pi_deploy_group">
+          <mxGeometry x="30" y="40" width="200" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="pi_install" value="pip install -e .&#xa;venv --system-site-packages" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="pi_deploy_group">
+          <mxGeometry x="30" y="95" width="200" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="pi_apt" value="apt: picamera2, gpiozero,&#xa;opencv, espeak-ng" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="pi_deploy_group">
+          <mxGeometry x="30" y="160" width="200" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- Config -->
+        <mxCell id="config" value="config/config.yaml&#xa;pir.enabled: false (Step 1)" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=12;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="640" y="60" width="180" height="80" as="geometry" />
+        </mxCell>
+
+        <!-- Step 1 Entry -->
+        <mxCell id="step1_entry" value="pi-face-greeter-validate-step1&#xa;(Step 1 — current milestone)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="40" y="280" width="280" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Package modules -->
+        <mxCell id="pkg_group" value="pi_face_greeter package" style="swimlane;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="360" y="280" width="460" height="220" as="geometry" />
+        </mxCell>
+        <mxCell id="mod_validate" value="validate_step1.py" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="pkg_group">
+          <mxGeometry x="20" y="40" width="130" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="mod_greet" value="greet_once.py" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="pkg_group">
+          <mxGeometry x="170" y="40" width="120" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="mod_main" value="main.py&#xa;(requires PIR)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;dashed=1;" vertex="1" parent="pkg_group">
+          <mxGeometry x="310" y="40" width="130" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="mod_camera" value="camera.py&#xa;Picamera2 CSI" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="pkg_group">
+          <mxGeometry x="20" y="110" width="130" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="mod_tts" value="tts.py&#xa;espeak-ng" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="pkg_group">
+          <mxGeometry x="170" y="110" width="120" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="mod_pir" value="pir_sensor.py&#xa;gpiozero GPIO17" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;dashed=1;" vertex="1" parent="pkg_group">
+          <mxGeometry x="310" y="110" width="130" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="mod_face" value="face_recognition.py&#xa;(stub)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#999999;dashed=1;" vertex="1" parent="pkg_group">
+          <mxGeometry x="20" y="175" width="130" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="mod_cooldown" value="cooldown.py" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;dashed=1;" vertex="1" parent="pkg_group">
+          <mxGeometry x="170" y="175" width="120" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- Hardware -->
+        <mxCell id="hw_group" value="Hardware (Pi 5)" style="swimlane;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="40" y="520" width="780" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="hw_cam" value="Camera Module 3&#xa;(CSI / Picamera2)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="hw_group">
+          <mxGeometry x="30" y="40" width="160" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="hw_usb" value="USB Sound Card&#xa;+ 8Ω Speaker" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="hw_group">
+          <mxGeometry x="220" y="40" width="160" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="hw_pir" value="AM312 PIR&#xa;GPIO17 (Step 2)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;dashed=1;" vertex="1" parent="hw_group">
+          <mxGeometry x="410" y="40" width="160" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="hw_dsi" value="5&quot; DSI Touchscreen&#xa;(future UI)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#999999;dashed=1;" vertex="1" parent="hw_group">
+          <mxGeometry x="600" y="40" width="160" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Outputs -->
+        <mxCell id="out_jpeg" value="data/captured/&#xa;step1_frame.jpg" style="shape=note;whiteSpace=wrap;html=1;size=14;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="860" y="300" width="140" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="out_logs" value="data/logs/&#xa;greeter.log" style="shape=note;whiteSpace=wrap;html=1;size=14;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="860" y="390" width="140" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- Edges: Mac flow -->
+        <mxCell id="e1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="mac_dev" target="mac_pytest">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="mac_pytest" target="mac_push">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e3" value="deploy" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="mac_push" target="pi_pull">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="pi_pull" target="pi_install">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Step 1 flow -->
+        <mxCell id="e5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="step1_entry" target="mod_validate">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="config" target="mod_validate">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="mod_validate" target="mod_camera">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="mod_validate" target="mod_tts">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e9" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="mod_camera" target="hw_cam">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e10" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="mod_tts" target="hw_usb">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e11" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="mod_camera" target="out_jpeg">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Step 2 dashed -->
+        <mxCell id="e12" value="Step 2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;dashed=1;" edge="1" parent="1" source="mod_main" target="mod_pir">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e13" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;dashed=1;" edge="1" parent="1" source="mod_pir" target="hw_pir">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e14" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;dashed=1;" edge="1" parent="1" source="mod_main" target="mod_camera">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="870" y="220" />
+              <mxPoint x="870" y="355" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Legend -->
+        <mxCell id="legend" value="Solid = Step 1 (active)&#xa;Dashed = Step 2 / future" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="860" y="500" width="200" height="40" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

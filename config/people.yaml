@@ -1,0 +1,10 @@
+# Known people for face recognition (future).
+# Example entry:
+#
+# people:
+#   - name: Todd
+#     greeting: "Hello Todd, welcome home."
+#     cooldown_seconds: 60
+#     face_dir: data/known_faces/todd
+
+people: []

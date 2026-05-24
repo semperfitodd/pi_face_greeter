@@ -1,0 +1,26 @@
+app:
+  name: Pi Face Greeter
+  cooldown_seconds: 30
+
+pir:
+  enabled: false
+  gpio_pin: 17
+
+camera:
+  enabled: true
+  backend: picamera2          # picamera2 | opencv (usb only)
+  capture_dir: data/captured
+  width: 640
+  height: 480
+  warmup_frames: 2
+
+tts:
+  enabled: true
+  engine: espeak
+  alsa_device: null           # e.g. "plughw:1,0" — set after running: aplay -l
+  voice: en
+  placeholder_greeting: "Hello. Face recognition is not enabled yet."
+
+logging:
+  level: INFO
+  file: data/logs/greeter.log
