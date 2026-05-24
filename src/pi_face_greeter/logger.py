@@ -5,7 +5,11 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 
-def setup_logging(level: str = "INFO", log_file: str | Path | None = None) -> logging.Logger:
+def setup_logging(
+    level: str = "INFO",
+    log_file: str | Path | None = None,
+    console: bool = True,
+) -> logging.Logger:
     logger = logging.getLogger("pi_face_greeter")
     logger.setLevel(getattr(logging, level.upper(), logging.INFO))
     logger.handlers.clear()
@@ -16,9 +20,10 @@ def setup_logging(level: str = "INFO", log_file: str | Path | None = None) -> lo
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 
-    console = logging.StreamHandler()
-    console.setFormatter(formatter)
-    logger.addHandler(console)
+    if console:
+        console_handler = logging.StreamHandler()
+        console_handler.setFormatter(formatter)
+        logger.addHandler(console_handler)
 
     if log_file:
         path = Path(log_file)

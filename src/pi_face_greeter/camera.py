@@ -20,12 +20,10 @@ class CameraBackend(ABC):
         pass
 
     def save_frame(self, frame: np.ndarray, output_path: Path) -> Path:
-        import cv2
+        from PIL import Image
 
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
-        if not cv2.imwrite(str(output_path), bgr):
-            raise RuntimeError(f"Failed to save frame to {output_path}")
+        Image.fromarray(frame).save(output_path, format="JPEG")
         logger.info("Saved frame to %s", output_path)
         return output_path
 
@@ -66,7 +64,14 @@ class OpenCVCamera(CameraBackend):
         height: int = 480,
         warmup_frames: int = 2,
     ) -> None:
-        import cv2
+        try:
+            import cv2
+        except ImportError as exc:
+            raise RuntimeError(
+                "OpenCV (cv2) is required for the USB camera backend. "
+                "On Raspberry Pi: sudo apt install python3-opencv and use a venv "
+                "with --system-site-packages."
+            ) from exc
 
         self._cv2 = cv2
         self._cap = cv2.VideoCapture(device_index)

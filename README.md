@@ -18,12 +18,14 @@ A Raspberry Pi 5 face recognition greeter. A PIR motion sensor wakes the system,
 8. [USB Audio Setup](#usb-audio-setup)
 9. [Develop on Mac](#develop-on-mac)
 10. [Deploy to Raspberry Pi](#deploy-to-raspberry-pi)
-11. [Step 1 Validation (No PIR)](#step-1-validation-no-pir)
-12. [Hardware Test Order](#hardware-test-order)
-13. [Run the Main App](#run-the-main-app)
-14. [Project Structure](#project-structure)
-15. [Troubleshooting](#troubleshooting)
-16. [Next Milestones](#next-milestones)
+11. [Step 1 Validation (Camera + TTS)](#step-1-validation-camera--tts)
+12. [Step 2 Face Enrollment](#step-2-face-enrollment)
+13. [Final Step: Motion Sensor (PIR)](#final-step-motion-sensor-pir)
+14. [Hardware Test Order](#hardware-test-order)
+15. [Run the Main App](#run-the-main-app)
+16. [Project Structure](#project-structure)
+17. [Troubleshooting](#troubleshooting)
+18. [Next Milestones](#next-milestones)
 
 ---
 
@@ -37,15 +39,18 @@ Pi Face Greeter sits by your door and:
 4. Plays a personalized greeting through speakers
 5. Shows status on a touchscreen *(future)*
 
-**Current milestone (Step 1):** Validate Camera Module 3 + USB TTS without PIR.
+**Milestone order:**
 
-- Captures a test JPEG to `data/captured/`
-- Speaks the placeholder greeting via espeak-ng
-- PIR is disabled until wired (`pir.enabled: false`)
+| Step | What | Command |
+|------|------|---------|
+| 1 | Camera + TTS validation | `pi-face-greeter-validate-step1` |
+| 2 | Face enrollment | `pi-face-greeter-enroll <name>` |
+| 3 | Face recognition | *(future)* |
+| Last | PIR motion loop | `pi-face-greeter-validate-motion` then `pi-face-greeter` |
 
-**After PIR is wired:** motion-triggered main loop with cooldown.
+PIR stays disabled (`pir.enabled: false`) until the **final** step.
 
-**Not yet implemented:** face enrollment, face recognition, touchscreen UI, auto-start on boot.
+**Not yet implemented:** face recognition, touchscreen UI, auto-start on boot.
 
 ---
 
@@ -53,7 +58,7 @@ Pi Face Greeter sits by your door and:
 
 ![Pi Face Greeter Architecture](architecture/architecture.svg)
 
-Source: [architecture/architecture.drawio](architecture/architecture.drawio). Solid boxes = Step 1 (active). Dashed = Step 2 / future (PIR, main loop, DSI UI).
+Source: [architecture/architecture.drawio](architecture/architecture.drawio). Solid = active milestones. Dashed = final PIR step / future.
 
 Regenerate after diagram edits:
 
@@ -65,15 +70,17 @@ drawio -x -f png -o architecture/architecture.png architecture/architecture.draw
 | Module | Path | Role |
 |--------|------|------|
 | Main loop | `src/pi_face_greeter/main.py` | Motion → capture → TTS → cooldown |
-| Step 1 validator | `src/pi_face_greeter/validate_step1.py` | Camera + TTS (no PIR) |
+| Step 1 validator | `src/pi_face_greeter/validate_step1.py` | Camera + TTS |
+| Step 2 enrollment | `src/pi_face_greeter/enroll.py` | Capture known-face photos |
+| Motion validator | `src/pi_face_greeter/validate_motion.py` | PIR + one greet (final step) |
 | PIR | `src/pi_face_greeter/pir_sensor.py` | gpiozero wrapper for AM312 |
 | Camera | `src/pi_face_greeter/camera.py` | Picamera2 (CSI) backend |
 | TTS | `src/pi_face_greeter/tts.py` | espeak-ng subprocess |
 | Config | `config/config.yaml` | Runtime settings |
 
-**Camera path for this build:** You have a **Raspberry Pi Camera Module 3** (CSI). Use **Picamera2** (`camera.backend: picamera2` in config). OpenCV is used only to save JPEGs and will support face detection later.
+**Camera path for this build:** You have a **Raspberry Pi Camera Module 3** (CSI). Use **Picamera2** (`camera.backend: picamera2` in config). JPEG saving uses Pillow (installed via pip).
 
-**USB webcam alternative:** Set `camera.backend: opencv` and `camera.device_index: 0` — not needed for Camera Module 3.
+**USB webcam alternative:** Set `camera.backend: opencv` and `camera.device_index: 0` — requires `python3-opencv` from apt.
 
 See [docs/wiring.md](docs/wiring.md) for physical connections and [docs/roadmap.md](docs/roadmap.md) for future work.
 
@@ -265,7 +272,7 @@ Install system packages (once on the Pi):
 sudo apt update
 sudo apt install -y \
   python3-picamera2 python3-libcamera rpicam-apps \
-  python3-gpiozero python3-lgpio python3-opencv \
+  python3-gpiozero python3-lgpio \
   espeak-ng alsa-utils v4l-utils
 
 sudo usermod -aG video,gpio $USER
@@ -283,7 +290,7 @@ Log out and back in for group membership. Do **not** pip install `picamera2`, `o
 
 ---
 
-## Step 1 Validation (No PIR)
+## Step 1 Validation (Camera + TTS)
 
 After camera and USB audio are wired, set `tts.alsa_device` if needed (see [USB Audio Setup](#usb-audio-setup)), then:
 
@@ -291,12 +298,60 @@ After camera and USB audio are wired, set `tts.alsa_device` if needed (see [USB 
 pi-face-greeter-validate-step1
 ```
 
-Success: `data/captured/step1_frame.jpg` exists and the placeholder greeting is audible. Exit code `0`.
+**Output:** one success line, or a failure summary with log path and tail. Full detail is in `data/logs/greeter.log`.
+
+Success example: `Step 1 passed. Frame: data/captured/step1_frame.jpg`
 
 Manual single greet (no PIR, no loop):
 
 ```bash
 pi-face-greeter-greet-once
+```
+
+---
+
+## Step 2 Face Enrollment
+
+After Step 1 passes, enroll known people by capturing reference photos:
+
+```bash
+pi-face-greeter-enroll Todd
+```
+
+Options: `--count 5` to override `enrollment.capture_count` in config.
+
+**Output:** one success line or failure summary with log tail (same quiet pattern as Step 1).
+
+Success example: `Step 2 passed. Enrolled Todd: 5 photos in data/known_faces/todd`
+
+Photos are saved as `001.jpg`, `002.jpg`, … under `data/known_faces/<slug>/`. The person is registered in `config/people.yaml`.
+
+If `python3-opencv` is installed on the Pi, each frame is checked for exactly one face. Enrollment still works without OpenCV (size check only).
+
+---
+
+## Final Step: Motion Sensor (PIR)
+
+**Do this last**, after enrollment and recognition are working.
+
+Wire the PIR, then set in `config/config.yaml`:
+
+```yaml
+pir:
+  enabled: true
+  gpio_pin: 17
+```
+
+Validate motion triggers a full greet cycle:
+
+```bash
+pi-face-greeter-validate-motion
+```
+
+Then run the production loop:
+
+```bash
+pi-face-greeter
 ```
 
 ---
@@ -337,21 +392,26 @@ pi-face-greeter-test-camera
 pi-face-greeter-test-tts
 ```
 
-### 2. PIR (when wired)
-
-Set `pir.enabled: true` in `config/config.yaml`, then:
+### 2. Step 2 enrollment
 
 ```bash
-pi-face-greeter-test-pir
+pi-face-greeter-enroll Todd
 ```
 
-### 3. Full motion loop
+### 3. Final step — motion (when PIR is wired)
+
+Set `pir.enabled: true`, then:
 
 ```bash
+pi-face-greeter-validate-motion
 pi-face-greeter
 ```
 
-Expected: motion → JPEG in `data/captured/` → greeting → 30s cooldown. Ctrl+C to stop.
+```bash
+pi-face-greeter-test-camera
+pi-face-greeter-test-tts
+pi-face-greeter-test-pir
+```
 
 ---
 

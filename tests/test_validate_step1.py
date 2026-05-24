@@ -20,6 +20,7 @@ def test_run_validate_step1_success(tmp_path: Path) -> None:
     with (
         patch("pi_face_greeter.validate_step1.validate_camera") as mock_camera,
         patch("pi_face_greeter.validate_step1.validate_tts") as mock_tts,
+        patch("pi_face_greeter.validate_step1.report_success") as mock_success,
     ):
         mock_camera.return_value = frame_path
         result = run_validate_step1(config)
@@ -27,6 +28,7 @@ def test_run_validate_step1_success(tmp_path: Path) -> None:
     assert result == 0
     mock_camera.assert_called_once_with(config["camera"])
     mock_tts.assert_called_once_with(config["tts"])
+    mock_success.assert_called_once()
 
 
 def test_run_validate_step1_camera_failure() -> None:

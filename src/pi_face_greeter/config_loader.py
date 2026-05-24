@@ -30,6 +30,10 @@ def _resolve_paths(config: dict[str, Any]) -> None:
     if log_file := logging_cfg.get("file"):
         logging_cfg["file"] = str(_resolve_project_path(log_file))
 
+    enrollment_cfg = config.get("enrollment", {})
+    if known_faces_dir := enrollment_cfg.get("known_faces_dir"):
+        enrollment_cfg["known_faces_dir"] = str(_resolve_project_path(known_faces_dir))
+
 
 def _resolve_project_path(value: str) -> Path:
     path = Path(value)

@@ -2,6 +2,14 @@ app:
   name: Pi Face Greeter
   cooldown_seconds: 30
 
+validation:
+  pir_wait_seconds: 30
+
+enrollment:
+  capture_count: 5
+  delay_seconds: 2
+  known_faces_dir: data/known_faces
+
 pir:
   enabled: false
   gpio_pin: 17

@@ -11,6 +11,7 @@ requires-python = ">=3.11"
 dependencies = [
     "PyYAML>=6.0",
     "numpy>=1.24",
+    "Pillow>=10.0",
 ]
 
 [project.optional-dependencies]
@@ -22,6 +23,8 @@ dev = [
 [project.scripts]
 pi-face-greeter = "pi_face_greeter.main:main"
 pi-face-greeter-validate-step1 = "pi_face_greeter.validate_step1:main"
+pi-face-greeter-validate-motion = "pi_face_greeter.validate_motion:main"
+pi-face-greeter-enroll = "pi_face_greeter.enroll:main"
 pi-face-greeter-greet-once = "pi_face_greeter.greet_once:main"
 pi-face-greeter-test-camera = "pi_face_greeter.cli:test_camera"
 pi-face-greeter-test-tts = "pi_face_greeter.cli:test_tts"

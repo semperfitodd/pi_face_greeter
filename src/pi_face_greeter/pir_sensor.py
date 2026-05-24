@@ -24,7 +24,7 @@ class PIRSensor:
         self._motion_event.clear()
         triggered = self._motion_event.wait(timeout=timeout)
         if triggered:
-            logger.info("Motion detected on GPIO %s", self.gpio_pin)
+            logger.debug("Motion detected on GPIO %s", self.gpio_pin)
         return triggered
 
     def on_motion(self, callback: Callable[[], None]) -> None:

@@ -1,6 +1,8 @@
 PyYAML>=6.0
 numpy>=1.24
+Pillow>=10.0
 
 # Dev: pip install -e ".[dev]"
-# Pi apt packages: python3-picamera2 python3-gpiozero python3-opencv espeak-ng
+# Pi apt packages: python3-picamera2 python3-gpiozero espeak-ng
+# Pi opencv (USB camera backend only): python3-opencv
 # Pi venv: python3 -m venv --system-site-packages .venv

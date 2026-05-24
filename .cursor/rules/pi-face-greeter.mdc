@@ -6,9 +6,10 @@ globs: "**/*"
 # Pi Face Greeter
 
 - **Mac dev:** `pip install -e ".[dev]"` then `pytest`. No Picamera2/gpiozero hardware tests on Mac.
-- **Pi deploy:** `pip install -e .` in venv with `--system-site-packages`. Apt for picamera2, gpiozero, opencv, espeak-ng.
-- **Step 1 (no PIR):** `pi-face-greeter-validate-step1` on Pi. PIR last; set `pir.enabled: true` when wired.
+- **Pi deploy:** `pip install -e .` in venv with `--system-site-packages`. Apt for picamera2, gpiozero, espeak-ng.
+- **Milestone order:** Step 1 validate (camera+TTS) → Step 2 enroll → Step 3 recognition (future) → **final** PIR/motion.
+- **Validators/enrollment:** quiet terminal output; full logs in `data/logs/greeter.log`.
 - **Config:** YAML in `config/`. No hardcoded secrets or machine-specific ALSA paths in commits.
 - **Package:** `src/pi_face_greeter/`. Console scripts in `pyproject.toml`.
-- **Architecture diagram:** `architecture/architecture.drawio`. Regenerate SVG/PNG with drawio CLI when components or flows change.
+- **Architecture diagram:** `architecture/architecture.drawio`. Regenerate SVG/PNG with drawio CLI when components change.
 - Run `pytest` before push.
