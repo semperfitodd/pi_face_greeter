@@ -2,6 +2,15 @@ app:
   name: Pi Face Greeter
   cooldown_seconds: 30
 
+ui:
+  fullscreen: true
+  blink_interval_min: 2.0
+  blink_interval_max: 6.0
+  greet_cooldown_seconds: 30
+  presence_frames_required: 5
+  preview_width: 200
+  preview_height: 150
+
 validation:
   pir_wait_seconds: 30
 

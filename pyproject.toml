@@ -12,12 +12,14 @@ dependencies = [
     "PyYAML>=6.0",
     "numpy>=1.24",
     "Pillow>=10.0",
+    "kivy>=2.3",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
     "pytest-mock>=3.12",
+    "opencv-python>=4.8",
 ]
 
 [project.scripts]
@@ -29,6 +31,7 @@ pi-face-greeter-greet-once = "pi_face_greeter.greet_once:main"
 pi-face-greeter-test-camera = "pi_face_greeter.cli:test_camera"
 pi-face-greeter-test-tts = "pi_face_greeter.cli:test_tts"
 pi-face-greeter-test-pir = "pi_face_greeter.cli:test_pir"
+pi-face-greeter-app = "pi_face_greeter.app.main:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -43,14 +43,15 @@ Pi Face Greeter sits by your door and:
 
 | Step | What | Command |
 |------|------|---------|
-| 1 | Camera + TTS validation | `pi-face-greeter-validate-step1` |
-| 2 | Face enrollment | `pi-face-greeter-enroll <name>` |
-| 3 | Face recognition | *(future)* |
-| Last | PIR motion loop | `pi-face-greeter-validate-motion` then `pi-face-greeter` |
+| 1 | **Kiosk app** (animated face, camera preview, settings) | `pi-face-greeter-app` |
+| 2 | Face recognition (real identify) | *(future)* |
+| 3 | Face enrollment from settings UI | *(future)* |
+| — | Hardware validators (camera, TTS, enroll CLI) | `pi-face-greeter-validate-step1`, etc. |
+| Last | PIR motion loop (optional) | `pi-face-greeter-validate-motion` then `pi-face-greeter` |
 
-PIR stays disabled (`pir.enabled: false`) until the **final** step.
+PIR stays disabled (`pir.enabled: false`) until the **final** optional step.
 
-**Not yet implemented:** face recognition, touchscreen UI, auto-start on boot.
+**Kiosk app (Step 1):** Swipeable touchscreen UI with an animated face, live camera preview (yellow box on detected faces), spoken "Hi \<name\>" / "Hi friend" on presence, and a settings screen to add/list/edit/delete faces (enrollment capture stubbed).
 
 ---
 
@@ -69,9 +70,10 @@ drawio -x -f png -o architecture/architecture.png architecture/architecture.draw
 
 | Module | Path | Role |
 |--------|------|------|
-| Main loop | `src/pi_face_greeter/main.py` | Motion → capture → TTS → cooldown |
+| Kiosk app | `src/pi_face_greeter/app/` | Kivy UI: animated face, camera preview, settings |
+| Main loop | `src/pi_face_greeter/main.py` | Motion → capture → TTS → cooldown (PIR, optional) |
 | Step 1 validator | `src/pi_face_greeter/validate_step1.py` | Camera + TTS |
-| Step 2 enrollment | `src/pi_face_greeter/enroll.py` | Capture known-face photos |
+| Step 2 enrollment | `src/pi_face_greeter/enroll.py` | Capture known-face photos (CLI) |
 | Motion validator | `src/pi_face_greeter/validate_motion.py` | PIR + one greet (final step) |
 | PIR | `src/pi_face_greeter/pir_sensor.py` | gpiozero wrapper for AM312 |
 | Camera | `src/pi_face_greeter/camera.py` | Picamera2 (CSI) backend |
@@ -129,7 +131,7 @@ uname -m
 1. **Power off** the Pi.
 2. Connect the Hosyond 5" DSI ribbon per the display manual.
 3. Power on — you should see the desktop at 800×480.
-4. No application code uses the display in v1.
+4. Run the kiosk app: `pi-face-greeter-app` (see [Run the Kiosk App](#run-the-kiosk-app)).
 
 ### Step 4: PIR sensor wiring
 
@@ -273,6 +275,9 @@ sudo apt update
 sudo apt install -y \
   python3-picamera2 python3-libcamera rpicam-apps \
   python3-gpiozero python3-lgpio \
+  python3-opencv \
+  libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev \
+  pkg-config libmtdev-dev xinput xfonts-base xfonts-scalable \
   espeak-ng alsa-utils v4l-utils
 
 sudo usermod -aG video,gpio $USER
@@ -287,6 +292,23 @@ pip install -e .
 ```
 
 Log out and back in for group membership. Do **not** pip install `picamera2`, `opencv-python`, or `RPi.GPIO`.
+
+---
+
+## Run the Kiosk App
+
+Primary experience on the Hosyond 5" DSI touchscreen:
+
+```bash
+pi-face-greeter-app
+```
+
+- **Face screen (default):** Animated face with random blinking eyes and moving mouth during speech. Live camera preview in the upper-left corner; yellow box on detected faces. Says "Hi \<name\>" when recognized, "Hi friend" for unknown faces (recognition stubbed for now).
+- **Settings screen:** Swipe left. Add, list, edit, and delete faces. Enrollment photo capture is stubbed — names are saved to `config/people.yaml`.
+
+On Mac for UI development, set `camera.backend: opencv` in `config/config.yaml` and install dev deps: `pip install -e ".[dev]"`.
+
+UI settings in `config/config.yaml` under `ui:` (`fullscreen`, blink intervals, greet cooldown, preview size).
 
 ---
 
@@ -379,7 +401,13 @@ cd ~/pi_face_greeter
 source .venv/bin/activate
 ```
 
-### 1. Step 1 validation (camera + TTS)
+### 1. Kiosk app (primary)
+
+```bash
+pi-face-greeter-app
+```
+
+### 2. Step 1 validation (camera + TTS)
 
 ```bash
 pi-face-greeter-validate-step1
@@ -392,13 +420,13 @@ pi-face-greeter-test-camera
 pi-face-greeter-test-tts
 ```
 
-### 2. Step 2 enrollment
+### 3. Step 2 enrollment
 
 ```bash
 pi-face-greeter-enroll Todd
 ```
 
-### 3. Final step — motion (when PIR is wired)
+### 4. Final step — motion (when PIR is wired)
 
 Set `pir.enabled: true`, then:
 
@@ -454,6 +482,7 @@ pi_face_greeter/
 │   ├── config.yaml
 │   └── people.yaml
 ├── src/pi_face_greeter/
+│   ├── app/                 # Kivy kiosk UI
 │   ├── main.py
 │   ├── validate_step1.py
 │   ├── greet_once.py
@@ -535,27 +564,29 @@ sudo usermod -aG video $USER
 
 See [docs/roadmap.md](docs/roadmap.md) for the full roadmap:
 
-1. Face enrollment script and `data/known_faces/` storage
-2. Face recognition with confidence threshold
+1. Real face recognition (identify known people)
+2. Real enrollment capture from settings UI
 3. Per-person greetings and cooldown
-4. Hosyond DSI touchscreen kiosk UI
-5. FastAPI admin portal
-6. systemd auto-start
+4. FastAPI admin portal
+5. systemd auto-start
+6. PIR motion loop (optional)
 7. Piper TTS upgrade
 
 ---
 
 ## TODO List
 
-- [ ] Add face enrollment script
-- [ ] Store known face images under `data/known_faces/<person_name>/`
+- [x] Add touchscreen kiosk UI (Hosyond 5" DSI)
+- [x] Animated face with blinking eyes and talking mouth
+- [x] Live camera preview with face detection boxes
+- [x] Settings screen for face CRUD (stub enrollment)
+- [ ] Add real face recognition (`face_recognition`, DeepFace, or InsightFace)
 - [ ] Generate face embeddings
-- [ ] Add face recognition (`face_recognition`, DeepFace, or InsightFace)
 - [ ] Add confidence threshold
 - [ ] Require multiple matching frames before greeting
 - [ ] Add per-person greeting messages
 - [ ] Add per-person cooldown
-- [ ] Add touchscreen kiosk UI (Hosyond 5" DSI)
+- [ ] Real enrollment photo capture from settings UI
 - [ ] Add local FastAPI admin portal
 - [ ] Add systemd service for boot startup
 - [ ] Add privacy mode / mute button
