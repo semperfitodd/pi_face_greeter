@@ -59,8 +59,7 @@ class FaceScreen(Screen):
         face = AnimatedFace(
             blink_interval_min=float(self.ui_cfg.get("blink_interval_min", 2.0)),
             blink_interval_max=float(self.ui_cfg.get("blink_interval_max", 6.0)),
-            size_hint=(0.75, 0.75),
-            pos_hint={"center_x": 0.5, "center_y": 0.5},
+            size_hint=(1, 1),
         )
         self._animated_face = face
         root.add_widget(face)

@@ -9,6 +9,7 @@ from typing import Any
 import numpy as np
 import yaml
 
+from pi_face_greeter.app.detector import get_cascade_classifier
 from pi_face_greeter.camera import create_camera
 from pi_face_greeter.config_loader import PROJECT_ROOT
 
@@ -36,17 +37,12 @@ def _validate_frame(frame: np.ndarray, output_path: Path) -> None:
     if width < MIN_FACE_WIDTH or height < MIN_FACE_WIDTH:
         raise RuntimeError(f"Captured image resolution too low: {width}x{height}")
 
-    try:
-        import cv2
-    except ImportError:
-        logger.warning("OpenCV not available; skipping face count check")
+    detector = get_cascade_classifier()
+    if detector is None:
+        logger.warning("OpenCV or Haar cascade unavailable; skipping face count check")
         return
 
-    cascade_path = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
-    detector = cv2.CascadeClassifier(cascade_path)
-    if detector.empty():
-        logger.warning("Haar cascade unavailable; skipping face count check")
-        return
+    import cv2
 
     gray = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
     faces = detector.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5)

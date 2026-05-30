@@ -3,7 +3,7 @@ from __future__ import annotations
 import random
 
 from kivy.clock import Clock
-from kivy.graphics import Color, Ellipse, Line, Rectangle
+from kivy.graphics import Color, RoundedRectangle
 from kivy.properties import BooleanProperty, NumericProperty
 from kivy.uix.widget import Widget
 
@@ -70,6 +70,20 @@ class AnimatedFace(Widget):
         self._mouth_open = not self._mouth_open
         self._redraw()
 
+    def _draw_capsule(
+        self,
+        center_x: float,
+        center_y: float,
+        width: float,
+        height: float,
+        radius: float,
+    ) -> None:
+        RoundedRectangle(
+            pos=(center_x - width / 2, center_y - height / 2),
+            size=(width, height),
+            radius=[radius],
+        )
+
     def _redraw(self, *_args) -> None:
         self.canvas.clear()
 
@@ -77,75 +91,45 @@ class AnimatedFace(Widget):
             return
 
         cx = self.x + self.width / 2
-        cy = self.y + self.height / 2
-        face_radius = min(self.width, self.height) * 0.42
+        eye_y = self.y + self.height * 0.62
+        mouth_y = self.y + self.height * 0.28
+
+        eye_width = self.width * 0.18
+        eye_height = self.height * (0.11 if self._eyes_open else 0.014)
+        eye_offset_x = self.width * 0.22
+        eye_radius = min(eye_width, eye_height) * 0.45
+
+        mouth_width = self.width * (0.34 if self._mouth_open else 0.38)
+        mouth_height = self.height * (0.11 if self._mouth_open else 0.022)
+        mouth_radius = min(mouth_width, mouth_height) * 0.45
 
         with self.canvas:
-            Color(0.95, 0.82, 0.55, 1)
-            Ellipse(
-                pos=(cx - face_radius, cy - face_radius),
-                size=(face_radius * 2, face_radius * 2),
-            )
+            Color(0.02, 0.02, 0.05, 1)
+            RoundedRectangle(pos=self.pos, size=self.size, radius=[0])
 
-            eye_y = cy + face_radius * 0.2
-            eye_offset_x = face_radius * 0.35
-            eye_radius = face_radius * 0.12
+            glow = (0.1, 0.9, 1.0, 0.25)
+            solid = (0.1, 0.9, 1.0, 1.0)
 
-            Color(1, 1, 1, 1)
             for sign in (-1, 1):
-                Ellipse(
-                    pos=(cx + sign * eye_offset_x - eye_radius, eye_y - eye_radius),
-                    size=(eye_radius * 2, eye_radius * 2),
+                eye_cx = cx + sign * eye_offset_x
+                Color(*glow)
+                self._draw_capsule(
+                    eye_cx,
+                    eye_y,
+                    eye_width * 1.08,
+                    eye_height * 1.2,
+                    eye_radius,
                 )
+                Color(*solid)
+                self._draw_capsule(eye_cx, eye_y, eye_width, eye_height, eye_radius)
 
-            if self._eyes_open:
-                pupil_radius = eye_radius * 0.45
-                Color(0.1, 0.1, 0.1, 1)
-                for sign in (-1, 1):
-                    Ellipse(
-                        pos=(
-                            cx + sign * eye_offset_x - pupil_radius,
-                            eye_y - pupil_radius,
-                        ),
-                        size=(pupil_radius * 2, pupil_radius * 2),
-                    )
-            else:
-                Color(0.1, 0.1, 0.1, 1)
-                line_width = max(2, int(face_radius * 0.04))
-                for sign in (-1, 1):
-                    Line(
-                        points=[
-                            cx + sign * eye_offset_x - eye_radius,
-                            eye_y,
-                            cx + sign * eye_offset_x + eye_radius,
-                            eye_y,
-                        ],
-                        width=line_width,
-                    )
-
-            mouth_y = cy - face_radius * 0.25
-            mouth_width = face_radius * 0.55
-            mouth_height = face_radius * (0.18 if self._mouth_open else 0.08)
-
-            Color(0.55, 0.2, 0.2, 1)
-            if self._mouth_open:
-                Ellipse(
-                    pos=(cx - mouth_width / 2, mouth_y - mouth_height / 2),
-                    size=(mouth_width, mouth_height),
-                )
-            else:
-                Line(
-                    points=[
-                        cx - mouth_width / 2,
-                        mouth_y,
-                        cx + mouth_width / 2,
-                        mouth_y,
-                    ],
-                    width=max(2, int(face_radius * 0.05)),
-                )
-
-            Color(0.2, 0.2, 0.2, 0.15)
-            Rectangle(
-                pos=(self.x, self.y),
-                size=(self.width, self.height * 0.08),
+            Color(*glow)
+            self._draw_capsule(
+                cx,
+                mouth_y,
+                mouth_width * 1.08,
+                mouth_height * 1.2,
+                mouth_radius,
             )
+            Color(*solid)
+            self._draw_capsule(cx, mouth_y, mouth_width, mouth_height, mouth_radius)

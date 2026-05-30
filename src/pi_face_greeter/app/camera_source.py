@@ -70,10 +70,18 @@ class CameraSource:
         while not self._stop_event.is_set():
             try:
                 frame = self._camera.capture_frame()
-                boxes = tuple(detect_faces(frame))
-                snapshot = CameraSnapshot(frame=frame, boxes=boxes, timestamp=time.monotonic())
-                with self._lock:
-                    self._snapshot = snapshot
             except Exception:
                 logger.exception("Camera capture failed")
+                time.sleep(self._poll_interval)
+                continue
+
+            try:
+                boxes = tuple(detect_faces(frame))
+            except Exception:
+                logger.exception("Face detection failed")
+                boxes = ()
+
+            snapshot = CameraSnapshot(frame=frame, boxes=boxes, timestamp=time.monotonic())
+            with self._lock:
+                self._snapshot = snapshot
             time.sleep(self._poll_interval)

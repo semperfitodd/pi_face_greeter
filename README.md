@@ -261,6 +261,20 @@ Hardware tests (camera, TTS, PIR) run on the Pi only. Push after `pytest` passes
 
 ## Deploy to Raspberry Pi
 
+Quick setup from the project root on the Pi:
+
+```bash
+cd ~/pi_face_greeter
+git pull
+./scripts/setup_pi_apt.sh
+# log out and back in after apt setup (group membership)
+./scripts/setup_venv.sh
+source .venv/bin/activate
+pi-face-greeter-app
+```
+
+Or update an existing install:
+
 ```bash
 cd ~/pi_face_greeter
 git pull
@@ -268,7 +282,7 @@ source .venv/bin/activate
 pip install -e .
 ```
 
-Install system packages (once on the Pi):
+Install system packages manually (once on the Pi):
 
 ```bash
 sudo apt update
@@ -283,6 +297,8 @@ sudo apt install -y \
 sudo usermod -aG video,gpio $USER
 ```
 
+Or run `./scripts/setup_pi_apt.sh` to install the packages above automatically.
+
 Create the venv on the Pi with system site packages so apt libraries are visible:
 
 ```bash
@@ -290,6 +306,8 @@ python3 -m venv --system-site-packages .venv
 source .venv/bin/activate
 pip install -e .
 ```
+
+Or run `./scripts/setup_venv.sh` to create the venv and install the package.
 
 Log out and back in for group membership. Do **not** pip install `picamera2`, `opencv-python`, or `RPi.GPIO`.
 
