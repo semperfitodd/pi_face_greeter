@@ -44,11 +44,16 @@ def run_greet_cycle(
         frame_path = active_camera.save_frame(frame, capture_dir / filename)
 
         name, confidence = identify(frame)
+        ask_how_are_you = bool(tts_cfg.get("ask_how_are_you", True))
         if name:
             logger.info("Recognized %s (confidence %.2f)", name, confidence)
-            greeting = build_greeting(name, get_person_greeting(name))
+            greeting = build_greeting(
+                name,
+                get_person_greeting(name),
+                ask_how_are_you=ask_how_are_you,
+            )
         else:
-            greeting = build_greeting(None)
+            greeting = build_greeting(None, ask_how_are_you=ask_how_are_you)
     else:
         logger.info("Camera disabled in config")
         greeting = tts_cfg.get(

@@ -77,7 +77,7 @@ drawio -x -f png -o architecture/architecture.png architecture/architecture.draw
 | Motion validator | `src/pi_face_greeter/validate_motion.py` | PIR + one greet (final step) |
 | PIR | `src/pi_face_greeter/pir_sensor.py` | gpiozero wrapper for AM312 |
 | Camera | `src/pi_face_greeter/camera.py` | Picamera2 (CSI) backend |
-| TTS | `src/pi_face_greeter/tts.py` | espeak-ng subprocess |
+| TTS | `src/pi_face_greeter/tts.py` | Piper neural TTS (espeak-ng fallback) |
 | Config | `config/config.yaml` | Runtime settings |
 
 **Camera path for this build:** You have a **Raspberry Pi Camera Module 3** (CSI). Use **Picamera2** (`camera.backend: picamera2` in config). JPEG saving uses Pillow (installed via pip).
@@ -273,7 +273,7 @@ source .venv/bin/activate
 pi-face-greeter-app
 ```
 
-`setup_venv.sh` installs the optional `[recognition]` extra (`face_recognition` + dlib). The dlib compile can take 30+ minutes on a Pi — run it once and leave the terminal open.
+`setup_venv.sh` installs the optional `[recognition]` extra (`face_recognition` + dlib) and `[voice]` extra (Piper TTS), then downloads the Piper voice model. The dlib compile can take 30+ minutes on a Pi — run it once and leave the terminal open.
 
 Or update an existing install:
 
@@ -282,6 +282,8 @@ cd ~/pi_face_greeter
 git pull
 source .venv/bin/activate
 pip install -e ".[recognition]"
+pip install -e ".[voice]"
+./scripts/download_piper_voice.sh
 ```
 
 Install system packages manually (once on the Pi):
@@ -295,7 +297,7 @@ sudo apt install -y \
   libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev \
   pkg-config libmtdev-dev xinput xfonts-base xfonts-scalable \
   espeak-ng alsa-utils v4l-utils \
-  cmake build-essential libopenblas-dev liblapack-dev libjpeg-dev
+  cmake build-essential libopenblas-dev liblapack-dev libjpeg-dev libsndfile1
 
 sudo usermod -aG video,gpio $USER
 ```
@@ -308,6 +310,8 @@ Create the venv on the Pi with system site packages so apt libraries are visible
 python3 -m venv --system-site-packages .venv
 source .venv/bin/activate
 pip install -e ".[recognition]"
+pip install -e ".[voice]"
+./scripts/download_piper_voice.sh
 ```
 
 Or run `./scripts/setup_venv.sh` to create the venv and install the package.
@@ -324,12 +328,41 @@ Primary experience on the Hosyond 5" DSI touchscreen:
 pi-face-greeter-app
 ```
 
-- **Face screen (default):** Animated face with random blinking eyes and moving mouth during speech. Live camera preview in the upper-left corner; yellow box on detected faces. Says "Hi \<name\>" when recognized, "Hi friend" for unknown faces.
+- **Face screen (default):** Animated face with random blinking eyes and moving mouth during speech. Live camera preview in the upper-left corner; yellow box on detected faces. Greets with varied conversational phrases ("Hey Todd, good to see you. How are you doing today?") when recognized, or a friendly unknown greeting.
 - **Settings screen:** Swipe left. Add, list, edit, and delete faces. **Add Face** captures photos from the live camera (same `CameraSource` as the face screen), computes face embeddings, and reloads recognition without restarting the app.
 
 On Mac for UI development, set `camera.backend: opencv` in `config/config.yaml` and install dev deps: `pip install -e ".[dev]"`.
 
-UI settings in `config/config.yaml` under `ui:` (`fullscreen`, blink intervals, greet cooldown, preview size).
+UI settings in `config/config.yaml` under `ui:`:
+
+- `presence_frames_required` — consecutive face-detection frames before starting recognition
+- `recognition_frames_required` — same identity must confirm over N frames before greeting (reduces misfires)
+- `greet_cooldown_seconds` — default per-person cooldown between greetings
+
+Optional per-person overrides in `config/people.yaml`:
+
+```yaml
+people:
+  - name: Todd
+    face_dir: data/known_faces/todd
+    greeting: "Welcome home, Todd!"
+    cooldown_seconds: 120
+```
+
+### Natural voice (Piper)
+
+The kiosk uses **Piper** neural TTS by default (`tts.engine: piper`) for a natural US female voice (`en_US-amy-medium`). espeak-ng is kept as an automatic fallback if Piper or the voice model is missing.
+
+One-time setup on the Pi (included in `./scripts/setup_venv.sh`):
+
+```bash
+pip install -e ".[voice]"
+./scripts/download_piper_voice.sh   # downloads ~63MB model to data/voices/
+```
+
+The voice model is downloaded **once per Pi**, not per face or greeting. To swap voices, change `tts.piper.model` and download a different `.onnx` from [rhasspy/piper-voices](https://huggingface.co/rhasspy/piper-voices).
+
+Use `tts.engine: espeak` to force the old robotic voice. Toggle `tts.ask_how_are_you: false` to skip the follow-up question.
 
 ### Debugging / sharing logs
 
@@ -622,12 +655,9 @@ sudo usermod -aG video $USER
 
 See [docs/roadmap.md](docs/roadmap.md) for the full roadmap:
 
-1. Per-person cooldown overrides
-2. Require multiple matching frames before greeting
-3. FastAPI admin portal
-4. systemd auto-start
-5. PIR motion loop (optional)
-6. Piper TTS upgrade
+1. FastAPI admin portal
+2. systemd auto-start
+3. PIR motion loop (optional)
 
 ---
 
@@ -640,16 +670,16 @@ See [docs/roadmap.md](docs/roadmap.md) for the full roadmap:
 - [x] Face recognition via `face_recognition` (dlib)
 - [x] Generate face embeddings (`encodings.npy`)
 - [x] Confidence threshold (`recognition.tolerance`)
-- [ ] Require multiple matching frames before greeting
+- [x] Require multiple matching frames before greeting
 - [x] Per-person greeting messages (`greeting:` in people.yaml)
-- [ ] Per-person cooldown
+- [x] Per-person cooldown (`cooldown_seconds:` in people.yaml)
 - [x] Enrollment photo capture from settings UI
+- [x] Piper TTS for natural voice (espeak fallback)
 - [ ] Add local FastAPI admin portal
 - [ ] Add systemd service for boot startup
 - [ ] Add privacy mode / mute button
 - [ ] Add optional logging to SQLite
 - [ ] Add optional AWS sync later
-- [ ] Upgrade TTS to Piper for natural voice
 
 ---
 

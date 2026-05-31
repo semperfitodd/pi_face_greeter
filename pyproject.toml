@@ -24,6 +24,9 @@ dev = [
 recognition = [
     "face_recognition>=1.3.0",
 ]
+voice = [
+    "piper-tts>=1.2.0",
+]
 
 [project.scripts]
 pi-face-greeter = "pi_face_greeter.main:main"

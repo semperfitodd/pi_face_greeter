@@ -38,6 +38,11 @@ def _resolve_paths(config: dict[str, Any]) -> None:
     if snapshot_dir := diagnostics_cfg.get("snapshot_dir"):
         diagnostics_cfg["snapshot_dir"] = str(_resolve_project_path(snapshot_dir))
 
+    tts_cfg = config.get("tts", {})
+    piper_cfg = tts_cfg.get("piper", {})
+    if model_path := piper_cfg.get("model"):
+        piper_cfg["model"] = str(_resolve_project_path(model_path))
+
 
 def _resolve_project_path(value: str) -> Path:
     path = Path(value)

@@ -13,9 +13,10 @@ from pi_face_greeter.app.camera_preview import CameraPreview
 from pi_face_greeter.app.camera_source import CameraSource
 from pi_face_greeter.app.face_widget import AnimatedFace
 from pi_face_greeter.app.greeting import build_greeting
+from pi_face_greeter.app.identity_vote import PENDING, IdentityVoter
+from pi_face_greeter.app.per_person_cooldown import PerPersonCooldown, cooldown_key
 from pi_face_greeter.app.presence import should_trigger_greeting
-from pi_face_greeter.cooldown import CooldownGate
-from pi_face_greeter.face_recognition import get_person_greeting, identify
+from pi_face_greeter.face_recognition import get_person_cooldown, get_person_greeting, identify
 from pi_face_greeter.tts import speak_from_config
 
 logger = logging.getLogger("pi_face_greeter.face_screen")
@@ -35,13 +36,16 @@ class FaceScreen(Screen):
         self.ui_cfg = ui_cfg
 
         cooldown_seconds = float(ui_cfg.get("greet_cooldown_seconds", 30))
-        self._cooldown = CooldownGate(cooldown_seconds)
+        self._cooldown = PerPersonCooldown(cooldown_seconds)
         self._presence_frames_required = int(ui_cfg.get("presence_frames_required", 5))
+        self._recognition_frames_required = int(ui_cfg.get("recognition_frames_required", 3))
+        self._identity_voter = IdentityVoter(self._recognition_frames_required)
         self._consecutive_face_frames = 0
         self._greeting_in_progress = False
         self._status_label: Label | None = None
         self._animated_face: AnimatedFace | None = None
         self._tick_event = None
+        self._ask_how_are_you = bool(tts_cfg.get("ask_how_are_you", True))
 
         self._build_ui()
         Clock.schedule_once(self._start_presence_watch, 0)
@@ -62,6 +66,10 @@ class FaceScreen(Screen):
 
     def on_leave(self, *_args) -> None:
         self.stop_presence_watch()
+
+    def _reset_presence_state(self) -> None:
+        self._consecutive_face_frames = 0
+        self._identity_voter.reset()
 
     def _build_ui(self) -> None:
         root = FloatLayout()
@@ -111,13 +119,13 @@ class FaceScreen(Screen):
 
         snapshot = self.camera_source.get_snapshot()
         if snapshot.frame is None:
-            self._consecutive_face_frames = 0
+            self._reset_presence_state()
             return
 
         if snapshot.boxes:
             self._consecutive_face_frames += 1
         else:
-            self._consecutive_face_frames = 0
+            self._reset_presence_state()
             if self._status_label is not None:
                 self._status_label.text = ""
             return
@@ -125,32 +133,48 @@ class FaceScreen(Screen):
         if not should_trigger_greeting(
             self._consecutive_face_frames,
             self._presence_frames_required,
-            self._cooldown,
         ):
-            if (
-                self._consecutive_face_frames >= self._presence_frames_required
-                and not self._cooldown.can_trigger()
-            ):
-                remaining = int(self._cooldown.seconds_remaining())
-                if self._status_label is not None:
-                    self._status_label.text = f"Cooldown ({remaining}s)"
-            elif self._consecutive_face_frames < self._presence_frames_required:
-                logger.debug(
-                    "Face detected (%d/%d frames)",
-                    self._consecutive_face_frames,
-                    self._presence_frames_required,
-                )
+            logger.debug(
+                "Face detected (%d/%d frames)",
+                self._consecutive_face_frames,
+                self._presence_frames_required,
+            )
             return
 
-        self._trigger_greeting(snapshot.frame)
+        name, confidence = identify(snapshot.frame)
+        confirmed = self._identity_voter.push(name)
+        if confirmed is PENDING:
+            logger.debug(
+                "Confirming identity (%s, confidence %.2f)",
+                name or "unknown",
+                confidence,
+            )
+            return
 
-    def _trigger_greeting(self, frame) -> None:
+        key = cooldown_key(confirmed)
+        person_cooldown = get_person_cooldown(confirmed)
+        if person_cooldown is not None:
+            self._cooldown.set_duration(key, person_cooldown)
+
+        if not self._cooldown.can_trigger(key):
+            remaining = int(self._cooldown.seconds_remaining(key))
+            if self._status_label is not None:
+                label = confirmed or "friend"
+                self._status_label.text = f"Cooldown for {label} ({remaining}s)"
+            return
+
+        self._trigger_greeting(confirmed, confidence)
+
+    def _trigger_greeting(self, name: str | None, confidence: float) -> None:
         self._greeting_in_progress = True
-        self._consecutive_face_frames = 0
-        self._cooldown.mark_triggered()
+        self._reset_presence_state()
+        self._cooldown.mark_triggered(cooldown_key(name))
 
-        name, confidence = identify(frame)
-        greeting = build_greeting(name, get_person_greeting(name))
+        greeting = build_greeting(
+            name,
+            get_person_greeting(name),
+            ask_how_are_you=self._ask_how_are_you,
+        )
         if name:
             logger.info("Recognized %s (confidence %.2f)", name, confidence)
         else:

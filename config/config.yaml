@@ -8,6 +8,7 @@ ui:
   blink_interval_max: 6.0
   greet_cooldown_seconds: 30
   presence_frames_required: 5
+  recognition_frames_required: 3
   preview_width: 200
   preview_height: 150
 
@@ -48,9 +49,14 @@ camera:
 
 tts:
   enabled: true
-  engine: espeak
+  engine: piper             # piper | espeak
   alsa_device: null           # e.g. "plughw:1,0" — set after running: aplay -l
-  voice: en
+  voice: en                   # espeak fallback voice
+  ask_how_are_you: true
+  piper:
+    model: data/voices/en_US-amy-medium.onnx
+    length_scale: 1.0
+    sentence_silence: 0.3
   placeholder_greeting: "Hello. Face recognition is not enabled yet."
 
 logging:

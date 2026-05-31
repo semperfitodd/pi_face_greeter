@@ -16,9 +16,9 @@
 - [x] Generate face embeddings from enrolled photos
 - [x] Wire `identify()` to return known names
 - [x] Add confidence threshold in config (`recognition.tolerance`)
-- [ ] Require multiple matching frames before greeting
+- [x] Require multiple matching frames before greeting
 - [x] Per-person greeting messages from `config/people.yaml` (`greeting:` field)
-- [ ] Per-person cooldown overrides
+- [x] Per-person cooldown overrides
 
 ## Milestone 3: Real Enrollment
 
@@ -52,6 +52,6 @@
 
 ## Enhancements
 
-- [ ] Piper TTS for natural voice (replace espeak-ng)
+- [x] Piper TTS for natural voice (replace espeak-ng)
 - [ ] Optional AWS sync for logs or face data
 - [ ] Remote monitoring / alerts

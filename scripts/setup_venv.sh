@@ -10,6 +10,8 @@ source .venv/bin/activate
 pip install --upgrade pip
 pip install -e .
 pip install -e ".[recognition]"
+pip install -e ".[voice]"
+./scripts/download_piper_voice.sh
 
 echo "venv ready. Activate with: source .venv/bin/activate"
 echo "Run the app with: pi-face-greeter-app"

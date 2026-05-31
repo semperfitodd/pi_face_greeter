@@ -49,6 +49,22 @@ def get_person_greeting(name: str | None) -> str | None:
     return None
 
 
+def get_person_cooldown(name: str | None) -> float | None:
+    if _recognizer is None or not name:
+        return None
+    person = _recognizer.get_person(name)
+    if not person:
+        return None
+    cooldown = person.get("cooldown_seconds")
+    if cooldown is None:
+        return None
+    try:
+        return float(cooldown)
+    except (TypeError, ValueError):
+        logger.warning("Invalid cooldown_seconds for %s: %r", name, cooldown)
+        return None
+
+
 def identify(frame: np.ndarray) -> tuple[str | None, float]:
     if _recognizer is None:
         logger.debug("Face recognizer not configured")
