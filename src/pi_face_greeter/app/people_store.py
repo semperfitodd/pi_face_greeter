@@ -1,18 +1,25 @@
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 from typing import Any
 
 import yaml
 
 from pi_face_greeter.config_loader import PROJECT_ROOT
-from pi_face_greeter.enrollment import slugify_name
 
 logger = logging.getLogger("pi_face_greeter.people_store")
 
 DEFAULT_PEOPLE_PATH = PROJECT_ROOT / "config" / "people.yaml"
 DEFAULT_KNOWN_FACES_DIR = PROJECT_ROOT / "data" / "known_faces"
+
+
+def slugify_name(name: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", name.strip().lower()).strip("-")
+    if not slug:
+        raise ValueError("Name must contain at least one letter or number")
+    return slug
 
 
 class PeopleStoreError(Exception):
@@ -53,6 +60,34 @@ def _relative_face_dir(face_dir: Path) -> str:
         return face_dir.relative_to(PROJECT_ROOT).as_posix()
     except ValueError:
         return face_dir.as_posix()
+
+
+def upsert_person(
+    name: str,
+    face_dir: Path,
+    path: Path | None = None,
+) -> dict[str, Any]:
+    people_path = path or DEFAULT_PEOPLE_PATH
+    trimmed = name.strip()
+    if not trimmed:
+        raise PeopleStoreError("Name must not be empty")
+
+    relative_dir = _relative_face_dir(face_dir)
+    data = _load_data(people_path)
+    people: list[dict[str, Any]] = data.setdefault("people", [])
+
+    for person in people:
+        if person.get("name") == trimmed:
+            person["face_dir"] = relative_dir
+            _save_data(people_path, data)
+            logger.info("Updated person %s at %s", trimmed, relative_dir)
+            return person
+
+    entry = {"name": trimmed, "face_dir": relative_dir}
+    people.append(entry)
+    _save_data(people_path, data)
+    logger.info("Registered person %s at %s", trimmed, relative_dir)
+    return entry
 
 
 def add_person(
@@ -129,12 +164,3 @@ def delete_person(name: str, path: Path | None = None) -> None:
     data["people"] = remaining
     _save_data(people_path, data)
     logger.info("Deleted person %s", name)
-
-
-def stub_enroll_person(
-    name: str,
-    path: Path | None = None,
-    known_faces_dir: Path | None = None,
-) -> dict[str, Any]:
-    """Record a person without capturing photos (stub for future enrollment)."""
-    return add_person(name, path=path, known_faces_dir=known_faces_dir)

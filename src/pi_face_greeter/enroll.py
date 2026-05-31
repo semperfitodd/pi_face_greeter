@@ -31,7 +31,13 @@ def run_enroll(name: str, config: dict[str, Any], count: int | None = None) -> i
         return 1
 
     try:
-        person_dir = enroll_person(name, camera_cfg, enrollment_cfg, count=count)
+        person_dir = enroll_person(
+            name,
+            camera_cfg,
+            enrollment_cfg,
+            detection_cfg=config.get("detection", {}),
+            count=count,
+        )
         photo_count = len(list(person_dir.glob("*.jpg")))
         report_success(
             f"Step 2 passed. Enrolled {name}: {photo_count} photos in {person_dir}"

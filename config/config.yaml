@@ -56,7 +56,6 @@ tts:
   piper:
     model: data/voices/en_US-amy-medium.onnx
     length_scale: 1.0
-    sentence_silence: 0.3
   placeholder_greeting: "Hello. Face recognition is not enabled yet."
 
 logging:

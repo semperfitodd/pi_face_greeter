@@ -11,8 +11,8 @@ from pi_face_greeter.app.people_store import (
     add_person,
     delete_person,
     list_people,
-    stub_enroll_person,
     update_person_name,
+    upsert_person,
 )
 
 
@@ -72,11 +72,19 @@ def test_delete_missing_raises(people_env) -> None:
         delete_person("Missing", path=people_path)
 
 
-def test_stub_enroll_person(people_env) -> None:
+def test_upsert_person_adds_and_updates(people_env, tmp_path: Path, monkeypatch) -> None:
     people_path, faces_dir = people_env
-    entry = stub_enroll_person("Alex", path=people_path, known_faces_dir=faces_dir)
+    monkeypatch.setattr("pi_face_greeter.app.people_store.PROJECT_ROOT", tmp_path)
 
-    assert entry["name"] == "Alex"
-    with people_path.open(encoding="utf-8") as handle:
-        data = yaml.safe_load(handle)
-    assert len(data["people"]) == 1
+    face_dir = faces_dir / "todd"
+    face_dir.mkdir(parents=True)
+
+    entry = upsert_person("Todd", face_dir, path=people_path)
+    assert entry["name"] == "Todd"
+    assert entry["face_dir"].endswith("known_faces/todd")
+
+    updated_dir = faces_dir / "todd-v2"
+    updated_dir.mkdir(parents=True)
+    updated = upsert_person("Todd", updated_dir, path=people_path)
+    assert updated["face_dir"].endswith("known_faces/todd-v2")
+    assert len(list_people(people_path)) == 1

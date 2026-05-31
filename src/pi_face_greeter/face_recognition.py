@@ -66,9 +66,8 @@ def get_person_cooldown(name: str | None) -> float | None:
 
 
 def identify(frame: np.ndarray) -> tuple[str | None, float]:
-    if _recognizer is None:
-        logger.debug("Face recognizer not configured")
-        return None, 0.0
+    ensure_configured()
+    assert _recognizer is not None
     return _recognizer.identify(frame)
 
 

@@ -28,9 +28,11 @@ def test_slugify_name_rejects_empty() -> None:
 
 def test_register_person_adds_entry(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr("pi_face_greeter.enrollment.PROJECT_ROOT", tmp_path)
-    people_file = tmp_path / "people.yaml"
+    monkeypatch.setattr("pi_face_greeter.app.people_store.PROJECT_ROOT", tmp_path)
+    people_file = tmp_path / "config" / "people.yaml"
+    people_file.parent.mkdir(parents=True)
     people_file.write_text("people: []\n", encoding="utf-8")
-    monkeypatch.setattr("pi_face_greeter.enrollment.PEOPLE_YAML", people_file)
+    monkeypatch.setattr("pi_face_greeter.app.people_store.DEFAULT_PEOPLE_PATH", people_file)
 
     face_dir = tmp_path / "data" / "known_faces" / "todd"
     face_dir.mkdir(parents=True)
@@ -45,10 +47,11 @@ def test_register_person_adds_entry(tmp_path: Path, monkeypatch) -> None:
 
 def test_enroll_person_saves_photos(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr("pi_face_greeter.enrollment.PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr("pi_face_greeter.app.people_store.PROJECT_ROOT", tmp_path)
     people_file = tmp_path / "config" / "people.yaml"
     people_file.parent.mkdir(parents=True)
     people_file.write_text("people: []\n", encoding="utf-8")
-    monkeypatch.setattr("pi_face_greeter.enrollment.PEOPLE_YAML", people_file)
+    monkeypatch.setattr("pi_face_greeter.app.people_store.DEFAULT_PEOPLE_PATH", people_file)
 
     frame = np.zeros((480, 640, 3), dtype=np.uint8)
     mock_camera = MagicMock()
@@ -80,10 +83,11 @@ def test_enroll_person_saves_photos(tmp_path: Path, monkeypatch) -> None:
 
 def test_enroll_from_frames_saves_photos_and_encodings(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr("pi_face_greeter.enrollment.PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr("pi_face_greeter.app.people_store.PROJECT_ROOT", tmp_path)
     people_file = tmp_path / "config" / "people.yaml"
     people_file.parent.mkdir(parents=True)
     people_file.write_text("people: []\n", encoding="utf-8")
-    monkeypatch.setattr("pi_face_greeter.enrollment.PEOPLE_YAML", people_file)
+    monkeypatch.setattr("pi_face_greeter.app.people_store.DEFAULT_PEOPLE_PATH", people_file)
 
     frame = np.zeros((480, 640, 3), dtype=np.uint8)
     enrollment_cfg = {
@@ -112,25 +116,64 @@ def test_enroll_from_frames_saves_photos_and_encodings(tmp_path: Path, monkeypat
     assert data["people"][0]["name"] == "Todd"
 
 
+def test_enroll_person_count_override(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr("pi_face_greeter.enrollment.PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr("pi_face_greeter.app.people_store.PROJECT_ROOT", tmp_path)
+    people_file = tmp_path / "config" / "people.yaml"
+    people_file.parent.mkdir(parents=True)
+    people_file.write_text("people: []\n", encoding="utf-8")
+    monkeypatch.setattr("pi_face_greeter.app.people_store.DEFAULT_PEOPLE_PATH", people_file)
+
+    frame = np.zeros((480, 640, 3), dtype=np.uint8)
+    mock_camera = MagicMock()
+    mock_camera.capture_frame.return_value = frame
+
+    camera_cfg = {"enabled": True, "backend": "picamera2"}
+    enrollment_cfg = {
+        "capture_count": 5,
+        "delay_seconds": 0,
+        "known_faces_dir": str(tmp_path / "data" / "known_faces"),
+    }
+    fake_encoding = np.ones(128, dtype=np.float64)
+
+    with (
+        patch("pi_face_greeter.enrollment.create_camera", return_value=mock_camera),
+        patch("pi_face_greeter.enrollment._validate_frame"),
+        patch("pi_face_greeter.enrollment.detect_faces", return_value=[(100, 100, 80, 80)]),
+        patch("pi_face_greeter.enrollment.encode_face", return_value=fake_encoding),
+        patch("pi_face_greeter.enrollment._save_frame_jpeg"),
+        patch("pi_face_greeter.enrollment.time.sleep"),
+    ):
+        enroll_person("Todd", camera_cfg, enrollment_cfg, count=3)
+
+    assert mock_camera.capture_frame.call_count == 3
+
+
 def test_run_enroll_success(tmp_path: Path) -> None:
     config = {
         "logging": {"file": str(tmp_path / "greeter.log")},
         "camera": {"enabled": True},
+        "detection": {"min_neighbors": 4},
         "enrollment": {"known_faces_dir": str(tmp_path / "faces")},
     }
 
     with (
-        patch(
-            "pi_face_greeter.enroll.enroll_person",
-            return_value=tmp_path / "faces" / "todd",
-        ),
+        patch("pi_face_greeter.enroll.enroll_person") as mock_enroll,
         patch("pi_face_greeter.enroll.report_success") as mock_success,
     ):
         (tmp_path / "faces" / "todd").mkdir(parents=True)
         for i in range(1, 4):
             (tmp_path / "faces" / "todd" / f"{i:03d}.jpg").write_bytes(b"jpeg")
-        result = run_enroll("Todd", config)
+        mock_enroll.return_value = tmp_path / "faces" / "todd"
+        result = run_enroll("Todd", config, count=3)
 
     assert result == 0
+    mock_enroll.assert_called_once_with(
+        "Todd",
+        config["camera"],
+        config["enrollment"],
+        detection_cfg=config["detection"],
+        count=3,
+    )
     mock_success.assert_called_once()
     assert "Step 2 passed" in mock_success.call_args[0][0]

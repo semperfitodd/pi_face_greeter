@@ -126,3 +126,25 @@ def test_face_recognition_module_reload(monkeypatch) -> None:
 
     fr.reload()
     recognizer.load.assert_called_once()
+
+
+def test_identify_auto_configures(monkeypatch) -> None:
+    import pi_face_greeter.face_recognition as fr
+
+    mock_recognizer = MagicMock()
+    mock_recognizer.identify.return_value = ("Todd", 0.9)
+
+    monkeypatch.setattr(fr, "_recognizer", None)
+
+    def fake_configure(recognition_cfg=None):
+        fr._recognizer = mock_recognizer
+        return mock_recognizer
+
+    monkeypatch.setattr(fr, "configure", fake_configure)
+
+    frame = np.zeros((100, 100, 3), dtype=np.uint8)
+    name, confidence = fr.identify(frame)
+
+    mock_recognizer.identify.assert_called_once_with(frame)
+    assert name == "Todd"
+    assert confidence == 0.9

@@ -46,7 +46,6 @@ def speak_piper(
     model_path: str | Path,
     alsa_device: str | None = None,
     length_scale: float = 1.0,
-    sentence_silence: float = 0.3,
 ) -> None:
     if not text.strip():
         logger.warning("Empty TTS text, skipping")
@@ -56,8 +55,7 @@ def speak_piper(
         raise RuntimeError("aplay not found. Install with: sudo apt install alsa-utils")
 
     try:
-        from piper import PiperVoice
-        from piper.config import SynthesisConfig
+        from piper import PiperVoice, SynthesisConfig
     except ImportError as exc:
         raise RuntimeError(
             "piper-tts not installed. Install with: pip install -e \".[voice]\""
@@ -79,12 +77,9 @@ def speak_piper(
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as handle:
             wav_path = handle.name
 
-        syn_config = SynthesisConfig(
-            length_scale=length_scale,
-            sentence_silence=sentence_silence,
-        )
+        syn_config = SynthesisConfig(length_scale=length_scale)
         with wave.open(wav_path, "wb") as wav_file:
-            voice.synthesize(text, wav_file, syn_config=syn_config)
+            voice.synthesize_wav(text, wav_file, syn_config=syn_config)
 
         command = ["aplay", "-q"]
         if alsa_device:
@@ -115,7 +110,6 @@ def speak_from_config(text: str, tts_cfg: dict[str, Any]) -> None:
                 model_path=piper_cfg.get("model", "data/voices/en_US-amy-medium.onnx"),
                 alsa_device=alsa_device,
                 length_scale=float(piper_cfg.get("length_scale", 1.0)),
-                sentence_silence=float(piper_cfg.get("sentence_silence", 0.3)),
             )
             return
         except Exception:

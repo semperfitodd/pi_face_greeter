@@ -18,6 +18,8 @@ data/debug/*
 !data/debug/.gitkeep
 data/known_faces/**/*
 !data/known_faces/.gitkeep
+data/voices/*
+!data/voices/.gitkeep
 
 # Editor / OS
 .DS_Store

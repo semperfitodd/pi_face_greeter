@@ -1,47 +1,24 @@
 from __future__ import annotations
 
 import logging
-import re
 import time
 from pathlib import Path
 from typing import Any
 
 import numpy as np
-import yaml
 
+from pi_face_greeter.app import people_store
 from pi_face_greeter.app.detector import detect_faces
+from pi_face_greeter.app.people_store import slugify_name
 from pi_face_greeter.app.recognizer import ENCODINGS_FILENAME, encode_face
 from pi_face_greeter.camera import create_camera
 from pi_face_greeter.config_loader import PROJECT_ROOT
 
 logger = logging.getLogger("pi_face_greeter.enrollment")
 
-PEOPLE_YAML = PROJECT_ROOT / "config" / "people.yaml"
-
-
-def slugify_name(name: str) -> str:
-    slug = re.sub(r"[^a-z0-9]+", "-", name.strip().lower()).strip("-")
-    if not slug:
-        raise ValueError("Name must contain at least one letter or number")
-    return slug
-
 
 def register_person(name: str, face_dir: Path) -> None:
-    data = yaml.safe_load(PEOPLE_YAML.read_text(encoding="utf-8")) or {}
-    people = data.get("people", [])
-
-    relative_face_dir = face_dir.relative_to(PROJECT_ROOT).as_posix()
-    for person in people:
-        if person.get("name") == name:
-            person["face_dir"] = relative_face_dir
-            break
-    else:
-        people.append({"name": name, "face_dir": relative_face_dir})
-
-    data["people"] = people
-    PEOPLE_YAML.parent.mkdir(parents=True, exist_ok=True)
-    PEOPLE_YAML.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
-    logger.info("Registered %s in %s", name, PEOPLE_YAML)
+    people_store.upsert_person(name, face_dir)
 
 
 def _save_frame_jpeg(frame: np.ndarray, path: Path) -> None:
@@ -131,8 +108,11 @@ def enroll_person(
     camera_cfg: dict[str, Any],
     enrollment_cfg: dict[str, Any],
     detection_cfg: dict[str, Any] | None = None,
+    count: int | None = None,
 ) -> Path:
-    capture_count = int(enrollment_cfg.get("capture_count", 5))
+    capture_count = (
+        count if count is not None else int(enrollment_cfg.get("capture_count", 5))
+    )
     delay_seconds = float(enrollment_cfg.get("delay_seconds", 0.5))
 
     camera = create_camera(camera_cfg)
