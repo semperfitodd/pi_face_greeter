@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Callable
+from typing import Any, Callable
 
 from kivy.clock import Clock
 from kivy.uix.boxlayout import BoxLayout
@@ -12,25 +12,37 @@ from kivy.uix.screenmanager import Screen
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.textinput import TextInput
 
+from pi_face_greeter.app.camera_source import CameraSource
 from pi_face_greeter.app.people_store import (
     PersonAlreadyExistsError,
     PersonNotFoundError,
     PeopleStoreError,
     delete_person,
     list_people,
-    stub_enroll_person,
     update_person_name,
 )
+from pi_face_greeter.enrollment import enroll_from_frames
 
 logger = logging.getLogger("pi_face_greeter.settings_screen")
 
 
 class SettingsScreen(Screen):
-    def __init__(self, on_people_changed: Callable[[], None] | None = None, **kwargs) -> None:
+    def __init__(
+        self,
+        camera_source: CameraSource | None = None,
+        enrollment_cfg: dict[str, Any] | None = None,
+        detection_cfg: dict[str, Any] | None = None,
+        on_people_changed: Callable[[], None] | None = None,
+        **kwargs,
+    ) -> None:
         super().__init__(**kwargs)
+        self.camera_source = camera_source
+        self.enrollment_cfg = enrollment_cfg or {}
+        self.detection_cfg = detection_cfg or {}
         self.on_people_changed = on_people_changed
         self._people_list = BoxLayout(orientation="vertical", spacing=8, size_hint_y=None)
         self._people_list.bind(minimum_height=self._people_list.setter("height"))
+        self._capture_event = None
         self._build_ui()
         self.refresh_people()
 
@@ -128,17 +140,30 @@ class SettingsScreen(Screen):
         if self.on_people_changed is not None:
             self.on_people_changed()
 
+    def _person_exists(self, name: str) -> bool:
+        lowered = name.strip().lower()
+        return any(person.get("name", "").strip().lower() == lowered for person in list_people())
+
+    def _stop_capture(self) -> None:
+        if self._capture_event is not None:
+            self._capture_event.cancel()
+            self._capture_event = None
+
     def _prompt_add_face(self) -> None:
+        if self.camera_source is None:
+            self._set_status("Camera is not available for enrollment.")
+            return
+
         content = BoxLayout(orientation="vertical", spacing=8, padding=8)
         name_input = TextInput(hint_text="Name", multiline=False, size_hint_y=None, height=40)
         content.add_widget(name_input)
         content.add_widget(
             Label(
-                text="Enrollment capture is stubbed for now.",
+                text="After Save, look at the camera while photos are captured.",
                 font_size=12,
                 color=(0.7, 0.7, 0.7, 1),
                 size_hint_y=None,
-                height=24,
+                height=36,
             )
         )
 
@@ -156,19 +181,12 @@ class SettingsScreen(Screen):
             if not name:
                 self._set_status("Name is required.")
                 return
-            try:
-                stub_enroll_person(name)
-            except PersonAlreadyExistsError:
+            if self._person_exists(name):
                 self._set_status(f"{name} already exists.")
-                return
-            except PeopleStoreError as exc:
-                self._set_status(str(exc))
                 return
 
             popup.dismiss()
-            self._set_status(f"Added {name} (stub enrollment).")
-            self.refresh_people()
-            self._notify_changed()
+            self._start_enrollment_capture(name)
 
         save_button = Button(text="Save")
         save_button.bind(on_press=_save)
@@ -179,7 +197,81 @@ class SettingsScreen(Screen):
         content.add_widget(actions)
 
         popup.open()
-        Clock.schedule_once(lambda _dt: name_input.focus, 0.1)
+        Clock.schedule_once(lambda _dt: setattr(name_input, "focus", True), 0.1)
+
+    def _start_enrollment_capture(self, name: str) -> None:
+        capture_count = int(self.enrollment_cfg.get("capture_count", 5))
+        sample_interval = float(self.enrollment_cfg.get("sample_interval_seconds", 0.4))
+
+        content = BoxLayout(orientation="vertical", spacing=8, padding=8)
+        progress = Label(
+            text="Look at the camera...",
+            halign="center",
+            valign="middle",
+        )
+        progress.bind(size=lambda inst, _val: setattr(inst, "text_size", inst.size))
+        content.add_widget(progress)
+
+        popup = Popup(
+            title=f"Enrolling {name}",
+            content=content,
+            size_hint=(0.85, 0.35),
+            auto_dismiss=False,
+        )
+
+        captured_frames: list[Any] = []
+
+        def _cancel(_btn) -> None:
+            self._stop_capture()
+            popup.dismiss()
+            self._set_status("Enrollment cancelled.")
+
+        cancel_button = Button(text="Cancel", size_hint_y=None, height=44)
+        cancel_button.bind(on_press=_cancel)
+        content.add_widget(cancel_button)
+
+        def _sample(_dt) -> None:
+            snapshot = self.camera_source.get_snapshot()
+            if snapshot.frame is None:
+                progress.text = "Waiting for camera..."
+                return
+
+            if len(snapshot.boxes) != 1:
+                progress.text = (
+                    f"Need exactly one face ({len(snapshot.boxes)} detected). "
+                    f"Captured {len(captured_frames)}/{capture_count}..."
+                )
+                return
+
+            captured_frames.append(snapshot.frame.copy())
+            progress.text = f"Capturing {len(captured_frames)}/{capture_count}..."
+            if len(captured_frames) >= capture_count:
+                self._stop_capture()
+                popup.dismiss()
+                self._finish_enrollment(name, captured_frames)
+
+        popup.open()
+        self._capture_event = Clock.schedule_interval(_sample, sample_interval)
+
+    def _finish_enrollment(self, name: str, frames: list[Any]) -> None:
+        self._set_status(f"Saving enrollment for {name}...")
+        try:
+            result = enroll_from_frames(
+                name,
+                frames,
+                self.enrollment_cfg,
+                self.detection_cfg,
+            )
+        except Exception as exc:
+            logger.exception("Enrollment failed for %s", name)
+            self._set_status(str(exc))
+            return
+
+        self._set_status(
+            f"Enrolled {name} ({result['photo_count']} photo(s) saved)."
+        )
+        self.refresh_people()
+        self._notify_changed()
 
     def _prompt_edit_face(self, current_name: str) -> None:
         content = BoxLayout(orientation="vertical", spacing=8, padding=8)
@@ -231,7 +323,7 @@ class SettingsScreen(Screen):
         content.add_widget(actions)
 
         popup.open()
-        Clock.schedule_once(lambda _dt: name_input.focus, 0.1)
+        Clock.schedule_once(lambda _dt: setattr(name_input, "focus", True), 0.1)
 
     def _confirm_delete_face(self, name: str) -> None:
         content = BoxLayout(orientation="vertical", spacing=8, padding=8)

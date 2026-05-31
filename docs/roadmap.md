@@ -7,24 +7,24 @@
 - [x] Animated face (random blinking eyes, talking mouth during TTS)
 - [x] Live camera preview in upper-left with yellow face-detection boxes
 - [x] Face presence triggers greeting: "Hi \<name\>" or "Hi friend"
-- [x] Settings screen: list/add/edit/delete faces (stub enrollment)
+- [x] Settings screen: list/add/edit/delete faces (live enrollment from camera)
 - [ ] Confirm kiosk app on real Pi 5 with DSI display
 
 ## Milestone 2: Face Recognition
 
-- [ ] Integrate recognition library (`face_recognition`, DeepFace, or InsightFace)
-- [ ] Generate face embeddings from enrolled photos
-- [ ] Wire `identify()` to return known names
-- [ ] Add confidence threshold in config
+- [x] Integrate recognition library (`face_recognition` / dlib)
+- [x] Generate face embeddings from enrolled photos
+- [x] Wire `identify()` to return known names
+- [x] Add confidence threshold in config (`recognition.tolerance`)
 - [ ] Require multiple matching frames before greeting
-- [ ] Per-person greeting messages from `config/people.yaml`
+- [x] Per-person greeting messages from `config/people.yaml` (`greeting:` field)
 - [ ] Per-person cooldown overrides
 
 ## Milestone 3: Real Enrollment
 
-- [ ] Photo capture flow from settings "Add Face"
-- [ ] Reuse or replace CLI `pi-face-greeter-enroll`
-- [ ] Optional single-face check via OpenCV Haar cascade
+- [x] Photo capture flow from settings "Add Face"
+- [x] CLI `pi-face-greeter-enroll` saves photos + `encodings.npy`
+- [x] Single-face check via OpenCV Haar cascade during enrollment
 - [ ] Confirm enrollment on real Pi 5
 
 ## Milestone 4: Admin & Operations

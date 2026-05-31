@@ -21,6 +21,9 @@ dev = [
     "pytest-mock>=3.12",
     "opencv-python>=4.8",
 ]
+recognition = [
+    "face_recognition>=1.3.0",
+]
 
 [project.scripts]
 pi-face-greeter = "pi_face_greeter.main:main"

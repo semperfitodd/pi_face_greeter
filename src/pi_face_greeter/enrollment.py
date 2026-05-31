@@ -9,103 +9,144 @@ from typing import Any
 import numpy as np
 import yaml
 
-from pi_face_greeter.app.detector import detect_faces, get_cascade_classifier
+from pi_face_greeter.app.detector import detect_faces
+from pi_face_greeter.app.recognizer import ENCODINGS_FILENAME, encode_face
 from pi_face_greeter.camera import create_camera
 from pi_face_greeter.config_loader import PROJECT_ROOT
 
 logger = logging.getLogger("pi_face_greeter.enrollment")
 
 PEOPLE_YAML = PROJECT_ROOT / "config" / "people.yaml"
-MIN_IMAGE_BYTES = 1000
-MIN_FACE_WIDTH = 80
 
 
 def slugify_name(name: str) -> str:
-    slug = name.strip().lower()
-    slug = re.sub(r"[^a-z0-9]+", "-", slug)
-    slug = slug.strip("-")
+    slug = re.sub(r"[^a-z0-9]+", "-", name.strip().lower()).strip("-")
     if not slug:
         raise ValueError("Name must contain at least one letter or number")
     return slug
 
 
-def _validate_frame(frame: np.ndarray, output_path: Path) -> None:
-    if output_path.stat().st_size < MIN_IMAGE_BYTES:
-        raise RuntimeError(f"Captured image is too small: {output_path}")
-
-    height, width = frame.shape[:2]
-    if width < MIN_FACE_WIDTH or height < MIN_FACE_WIDTH:
-        raise RuntimeError(f"Captured image resolution too low: {width}x{height}")
-
-    detector = get_cascade_classifier()
-    if detector is None:
-        logger.warning("OpenCV or Haar cascade unavailable; skipping face count check")
-        return
-
-    boxes = detect_faces(frame)
-    face_count = len(boxes)
-    if face_count != 1:
-        raise RuntimeError(
-            f"Expected exactly one face in frame, detected {face_count}. "
-            "Adjust lighting or position and retry."
-        )
-
-
 def register_person(name: str, face_dir: Path) -> None:
-    if not PEOPLE_YAML.exists():
-        data: dict[str, Any] = {"people": []}
-    else:
-        with PEOPLE_YAML.open(encoding="utf-8") as handle:
-            data = yaml.safe_load(handle) or {"people": []}
+    data = yaml.safe_load(PEOPLE_YAML.read_text(encoding="utf-8")) or {}
+    people = data.get("people", [])
 
-    people: list[dict[str, Any]] = data.setdefault("people", [])
-    relative_dir = face_dir.relative_to(PROJECT_ROOT).as_posix()
-
+    relative_face_dir = face_dir.relative_to(PROJECT_ROOT).as_posix()
     for person in people:
         if person.get("name") == name:
-            person["face_dir"] = relative_dir
+            person["face_dir"] = relative_face_dir
             break
     else:
-        people.append({"name": name, "face_dir": relative_dir})
+        people.append({"name": name, "face_dir": relative_face_dir})
 
-    with PEOPLE_YAML.open("w", encoding="utf-8") as handle:
-        yaml.safe_dump(data, handle, default_flow_style=False, sort_keys=False)
+    data["people"] = people
+    PEOPLE_YAML.parent.mkdir(parents=True, exist_ok=True)
+    PEOPLE_YAML.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+    logger.info("Registered %s in %s", name, PEOPLE_YAML)
+
+
+def _save_frame_jpeg(frame: np.ndarray, path: Path) -> None:
+    try:
+        import cv2
+    except ImportError as exc:
+        raise RuntimeError("OpenCV is required to save enrollment photos") from exc
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+    if not cv2.imwrite(str(path), bgr):
+        raise RuntimeError(f"Failed to write enrollment photo: {path}")
+
+
+def enroll_from_frames(
+    name: str,
+    frames: list[np.ndarray],
+    enrollment_cfg: dict[str, Any],
+    detection_cfg: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    if not frames:
+        raise ValueError("At least one frame is required for enrollment")
+
+    slug = slugify_name(name)
+    known_faces_dir = Path(
+        enrollment_cfg.get("known_faces_dir", PROJECT_ROOT / "data" / "known_faces")
+    )
+    if not known_faces_dir.is_absolute():
+        known_faces_dir = PROJECT_ROOT / known_faces_dir
+
+    person_dir = known_faces_dir / slug
+    person_dir.mkdir(parents=True, exist_ok=True)
+
+    encodings: list[np.ndarray] = []
+    saved_count = 0
+
+    for index, frame in enumerate(frames, start=1):
+        boxes = detect_faces(frame, detection_cfg)
+        if len(boxes) != 1:
+            logger.warning(
+                "Skipping enrollment frame %d for %s: expected 1 face, got %d",
+                index,
+                name,
+                len(boxes),
+            )
+            continue
+
+        encoding = encode_face(frame, boxes[0])
+        if encoding is None:
+            logger.warning(
+                "Skipping enrollment frame %d for %s: could not compute encoding",
+                index,
+                name,
+            )
+            continue
+
+        photo_path = person_dir / f"{saved_count + 1:03d}.jpg"
+        _save_frame_jpeg(frame, photo_path)
+        encodings.append(encoding)
+        saved_count += 1
+
+    minimum_photos = int(enrollment_cfg.get("minimum_photos", 1))
+    if saved_count < minimum_photos:
+        raise RuntimeError(
+            f"Need at least {minimum_photos} valid single-face photo(s); got {saved_count}"
+        )
+
+    np.save(person_dir / ENCODINGS_FILENAME, np.stack(encodings))
+    register_person(name, person_dir)
+
+    return {
+        "name": name,
+        "slug": slug,
+        "face_dir": person_dir,
+        "photo_count": saved_count,
+    }
+
+
+def _validate_frame(frame: np.ndarray, detection_cfg: dict[str, Any] | None = None) -> None:
+    boxes = detect_faces(frame, detection_cfg)
+    if len(boxes) != 1:
+        raise RuntimeError(f"Expected exactly one face, found {len(boxes)}")
 
 
 def enroll_person(
     name: str,
     camera_cfg: dict[str, Any],
     enrollment_cfg: dict[str, Any],
-    count: int | None = None,
+    detection_cfg: dict[str, Any] | None = None,
 ) -> Path:
-    slug = slugify_name(name)
-    capture_count = count if count is not None else int(enrollment_cfg.get("capture_count", 5))
-    delay_seconds = float(enrollment_cfg.get("delay_seconds", 2))
-    known_faces_dir = Path(enrollment_cfg.get("known_faces_dir", "data/known_faces"))
-    person_dir = known_faces_dir / slug
-    person_dir.mkdir(parents=True, exist_ok=True)
-
-    if capture_count < 1:
-        raise ValueError("capture_count must be at least 1")
-
-    print(f"Enrolling {name}: capture {capture_count} photos ({delay_seconds:.0f}s apart)...")
+    capture_count = int(enrollment_cfg.get("capture_count", 5))
+    delay_seconds = float(enrollment_cfg.get("delay_seconds", 0.5))
 
     camera = create_camera(camera_cfg)
-    saved_paths: list[Path] = []
+    frames: list[np.ndarray] = []
 
     try:
-        for index in range(1, capture_count + 1):
+        for _ in range(capture_count):
             frame = camera.capture_frame()
-            output_path = person_dir / f"{index:03d}.jpg"
-            camera.save_frame(frame, output_path)
-            _validate_frame(frame, output_path)
-            saved_paths.append(output_path)
-            logger.info("Enrolled photo %s for %s", output_path.name, name)
-
-            if index < capture_count:
+            _validate_frame(frame, detection_cfg)
+            frames.append(frame)
+            if delay_seconds > 0:
                 time.sleep(delay_seconds)
     finally:
         camera.close()
 
-    register_person(name, person_dir)
-    return person_dir
+    result = enroll_from_frames(name, frames, enrollment_cfg, detection_cfg)
+    return result["face_dir"]

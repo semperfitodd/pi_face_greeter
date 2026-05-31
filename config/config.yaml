@@ -22,12 +22,16 @@ diagnostics:
   snapshot_dir: data/debug
   snapshot_interval_seconds: 2.0
 
+recognition:
+  tolerance: 0.6
+
 validation:
   pir_wait_seconds: 30
 
 enrollment:
   capture_count: 5
   delay_seconds: 2
+  sample_interval_seconds: 0.4   # kiosk settings capture interval
   known_faces_dir: data/known_faces
 
 pir:
@@ -52,3 +56,5 @@ tts:
 logging:
   level: INFO
   file: data/logs/greeter.log
+  max_bytes: 1000000          # rotate when greeter.log exceeds this (~1 MB)
+  backup_count: 3             # keep N rotated backups; total ~max_bytes * (backup_count + 1)

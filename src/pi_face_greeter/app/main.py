@@ -11,6 +11,8 @@ from pi_face_greeter.app.camera_source import CameraSource
 from pi_face_greeter.app.face_screen import FaceScreen
 from pi_face_greeter.app.settings_screen import SettingsScreen
 from pi_face_greeter.config_loader import load_config
+from pi_face_greeter.face_recognition import configure as configure_recognizer
+from pi_face_greeter.face_recognition import reload as reload_recognizer
 from pi_face_greeter.logger import setup_logging
 
 logger = logging.getLogger("pi_face_greeter.app")
@@ -43,6 +45,8 @@ class PiFaceGreeterApp(App):
             level=log_level,
             log_file=log_file,
             capture_loggers=capture_loggers,
+            max_bytes=int(logging_cfg.get("max_bytes", 1_000_000)),
+            backup_count=int(logging_cfg.get("backup_count", 3)),
         )
 
         if log_file:
@@ -60,6 +64,10 @@ class PiFaceGreeterApp(App):
         ui_cfg = self.config_data.get("ui", {})
         camera_cfg = self.config_data.get("camera", {})
         tts_cfg = self.config_data.get("tts", {})
+        enrollment_cfg = self.config_data.get("enrollment", {})
+        detection_cfg = self.config_data.get("detection", {})
+
+        configure_recognizer(self.config_data.get("recognition", {}))
 
         if ui_cfg.get("fullscreen", True):
             from kivy.core.window import Window
@@ -85,7 +93,13 @@ class PiFaceGreeterApp(App):
             tts_cfg=tts_cfg,
             ui_cfg=ui_cfg,
         )
-        settings_screen = SettingsScreen(name="settings")
+        settings_screen = SettingsScreen(
+            name="settings",
+            camera_source=self.camera_source,
+            enrollment_cfg=enrollment_cfg,
+            detection_cfg=detection_cfg,
+            on_people_changed=reload_recognizer,
+        )
         carousel.add_widget(face_screen)
         carousel.add_widget(settings_screen)
 

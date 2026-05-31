@@ -15,7 +15,7 @@ from pi_face_greeter.app.face_widget import AnimatedFace
 from pi_face_greeter.app.greeting import build_greeting
 from pi_face_greeter.app.presence import should_trigger_greeting
 from pi_face_greeter.cooldown import CooldownGate
-from pi_face_greeter.face_recognition import identify
+from pi_face_greeter.face_recognition import get_person_greeting, identify
 from pi_face_greeter.tts import speak_from_config
 
 logger = logging.getLogger("pi_face_greeter.face_screen")
@@ -150,7 +150,7 @@ class FaceScreen(Screen):
         self._cooldown.mark_triggered()
 
         name, confidence = identify(frame)
-        greeting = build_greeting(name)
+        greeting = build_greeting(name, get_person_greeting(name))
         if name:
             logger.info("Recognized %s (confidence %.2f)", name, confidence)
         else:

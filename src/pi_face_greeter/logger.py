@@ -10,6 +10,8 @@ def setup_logging(
     log_file: str | Path | None = None,
     console: bool = True,
     capture_loggers: list[str] | None = None,
+    max_bytes: int = 1_000_000,
+    backup_count: int = 3,
 ) -> logging.Logger:
     log_level = getattr(logging, level.upper(), logging.INFO)
     logger = logging.getLogger("pi_face_greeter")
@@ -34,8 +36,8 @@ def setup_logging(
         path.parent.mkdir(parents=True, exist_ok=True)
         file_handler = RotatingFileHandler(
             path,
-            maxBytes=1_000_000,
-            backupCount=3,
+            maxBytes=max_bytes,
+            backupCount=backup_count,
             encoding="utf-8",
         )
         file_handler.setFormatter(formatter)

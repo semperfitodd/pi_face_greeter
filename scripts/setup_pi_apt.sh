@@ -9,7 +9,8 @@ sudo apt install -y \
   python3-opencv \
   libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev \
   pkg-config libmtdev-dev xinput xfonts-base xfonts-scalable \
-  espeak-ng alsa-utils v4l-utils
+  espeak-ng alsa-utils v4l-utils \
+  cmake build-essential libopenblas-dev liblapack-dev libjpeg-dev
 
 sudo usermod -aG video,gpio "$USER"
 

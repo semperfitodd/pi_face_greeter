@@ -9,3 +9,7 @@ def test_build_greeting_with_name() -> None:
 
 def test_build_greeting_without_name() -> None:
     assert build_greeting(None) == "Hi friend"
+
+
+def test_build_greeting_custom_message() -> None:
+    assert build_greeting("Todd", "Welcome home, Todd!") == "Welcome home, Todd!"

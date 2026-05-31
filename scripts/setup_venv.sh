@@ -9,6 +9,8 @@ python3 -m venv --system-site-packages .venv
 source .venv/bin/activate
 pip install --upgrade pip
 pip install -e .
+pip install -e ".[recognition]"
 
 echo "venv ready. Activate with: source .venv/bin/activate"
 echo "Run the app with: pi-face-greeter-app"
+echo "Note: face_recognition/dlib build can take a while on the Pi."

@@ -6,10 +6,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from pi_face_greeter.app.greeting import build_greeting
 from pi_face_greeter.camera import CameraBackend, create_camera
 from pi_face_greeter.config_loader import load_config
 from pi_face_greeter.cooldown import CooldownGate
-from pi_face_greeter.face_recognition import identify
+from pi_face_greeter.face_recognition import configure as configure_recognizer
+from pi_face_greeter.face_recognition import get_person_greeting, identify
 from pi_face_greeter.logger import setup_logging
 from pi_face_greeter.pir_sensor import PIRSensor
 from pi_face_greeter.tts import speak_from_config
@@ -44,13 +46,16 @@ def run_greet_cycle(
         name, confidence = identify(frame)
         if name:
             logger.info("Recognized %s (confidence %.2f)", name, confidence)
+            greeting = build_greeting(name, get_person_greeting(name))
+        else:
+            greeting = build_greeting(None)
     else:
         logger.info("Camera disabled in config")
+        greeting = tts_cfg.get(
+            "placeholder_greeting",
+            "Hello. Face recognition is not enabled yet.",
+        )
 
-    greeting = tts_cfg.get(
-        "placeholder_greeting",
-        "Hello. Face recognition is not enabled yet.",
-    )
     speak_from_config(greeting, tts_cfg)
 
     return active_camera, frame_path
@@ -62,7 +67,10 @@ def main() -> int:
     setup_logging(
         level=logging_cfg.get("level", "INFO"),
         log_file=logging_cfg.get("file"),
+        max_bytes=int(logging_cfg.get("max_bytes", 1_000_000)),
+        backup_count=int(logging_cfg.get("backup_count", 3)),
     )
+    configure_recognizer(config.get("recognition", {}))
 
     app_cfg = config.get("app", {})
     pir_cfg = config.get("pir", {})

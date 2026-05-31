@@ -35,7 +35,7 @@ Pi Face Greeter sits by your door and:
 
 1. Waits for motion (PIR sensor)
 2. Wakes the camera and captures frames
-3. Identifies known faces *(future)*
+3. Identifies known faces with `face_recognition` (dlib)
 4. Plays a personalized greeting through speakers
 5. Shows status on a touchscreen *(future)*
 
@@ -43,15 +43,14 @@ Pi Face Greeter sits by your door and:
 
 | Step | What | Command |
 |------|------|---------|
-| 1 | **Kiosk app** (animated face, camera preview, settings) | `pi-face-greeter-app` |
-| 2 | Face recognition (real identify) | *(future)* |
-| 3 | Face enrollment from settings UI | *(future)* |
+| 1 | **Kiosk app** (animated face, camera preview, settings, recognition) | `pi-face-greeter-app` |
+| 2 | Face enrollment (CLI or from settings UI) | `pi-face-greeter-enroll` |
 | — | Hardware validators (camera, TTS, enroll CLI) | `pi-face-greeter-validate-step1`, etc. |
 | Last | PIR motion loop (optional) | `pi-face-greeter-validate-motion` then `pi-face-greeter` |
 
 PIR stays disabled (`pir.enabled: false`) until the **final** optional step.
 
-**Kiosk app (Step 1):** Swipeable touchscreen UI with an animated face, live camera preview (yellow box on detected faces), spoken "Hi \<name\>" / "Hi friend" on presence, and a settings screen to add/list/edit/delete faces (enrollment capture stubbed).
+**Kiosk app:** Swipeable touchscreen UI with an animated face, live camera preview (yellow box on detected faces), spoken "Hi \<name\>" / "Hi friend" on presence, and a settings screen to enroll and manage faces from the live camera.
 
 ---
 
@@ -73,7 +72,8 @@ drawio -x -f png -o architecture/architecture.png architecture/architecture.draw
 | Kiosk app | `src/pi_face_greeter/app/` | Kivy UI: animated face, camera preview, settings |
 | Main loop | `src/pi_face_greeter/main.py` | Motion → capture → TTS → cooldown (PIR, optional) |
 | Step 1 validator | `src/pi_face_greeter/validate_step1.py` | Camera + TTS |
-| Step 2 enrollment | `src/pi_face_greeter/enroll.py` | Capture known-face photos (CLI) |
+| Step 2 enrollment | `src/pi_face_greeter/enroll.py` | Capture known-face photos + embeddings (CLI) |
+| Recognition | `src/pi_face_greeter/app/recognizer.py` | Load encodings, identify faces |
 | Motion validator | `src/pi_face_greeter/validate_motion.py` | PIR + one greet (final step) |
 | PIR | `src/pi_face_greeter/pir_sensor.py` | gpiozero wrapper for AM312 |
 | Camera | `src/pi_face_greeter/camera.py` | Picamera2 (CSI) backend |
@@ -273,13 +273,15 @@ source .venv/bin/activate
 pi-face-greeter-app
 ```
 
+`setup_venv.sh` installs the optional `[recognition]` extra (`face_recognition` + dlib). The dlib compile can take 30+ minutes on a Pi — run it once and leave the terminal open.
+
 Or update an existing install:
 
 ```bash
 cd ~/pi_face_greeter
 git pull
 source .venv/bin/activate
-pip install -e .
+pip install -e ".[recognition]"
 ```
 
 Install system packages manually (once on the Pi):
@@ -292,7 +294,8 @@ sudo apt install -y \
   python3-opencv \
   libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev \
   pkg-config libmtdev-dev xinput xfonts-base xfonts-scalable \
-  espeak-ng alsa-utils v4l-utils
+  espeak-ng alsa-utils v4l-utils \
+  cmake build-essential libopenblas-dev liblapack-dev libjpeg-dev
 
 sudo usermod -aG video,gpio $USER
 ```
@@ -304,7 +307,7 @@ Create the venv on the Pi with system site packages so apt libraries are visible
 ```bash
 python3 -m venv --system-site-packages .venv
 source .venv/bin/activate
-pip install -e .
+pip install -e ".[recognition]"
 ```
 
 Or run `./scripts/setup_venv.sh` to create the venv and install the package.
@@ -321,8 +324,8 @@ Primary experience on the Hosyond 5" DSI touchscreen:
 pi-face-greeter-app
 ```
 
-- **Face screen (default):** Animated face with random blinking eyes and moving mouth during speech. Live camera preview in the upper-left corner; yellow box on detected faces. Says "Hi \<name\>" when recognized, "Hi friend" for unknown faces (recognition stubbed for now).
-- **Settings screen:** Swipe left. Add, list, edit, and delete faces. Enrollment photo capture is stubbed — names are saved to `config/people.yaml`.
+- **Face screen (default):** Animated face with random blinking eyes and moving mouth during speech. Live camera preview in the upper-left corner; yellow box on detected faces. Says "Hi \<name\>" when recognized, "Hi friend" for unknown faces.
+- **Settings screen:** Swipe left. Add, list, edit, and delete faces. **Add Face** captures photos from the live camera (same `CameraSource` as the face screen), computes face embeddings, and reloads recognition without restarting the app.
 
 On Mac for UI development, set `camera.backend: opencv` in `config/config.yaml` and install dev deps: `pip install -e ".[dev]"`.
 
@@ -344,6 +347,10 @@ On startup the app prints the absolute paths for:
 - **Debug snapshots:** `data/debug/` (JPEG every 2s with yellow boxes drawn on detected faces)
 
 Share `data/logs/greeter.log` and the latest images from `data/debug/` to diagnose detection issues. Adjust snapshot frequency via `diagnostics.snapshot_interval_seconds`.
+
+### Log rotation
+
+Logs rotate automatically via `logging.max_bytes` and `logging.backup_count` in `config/config.yaml`. Total on-disk size is roughly `max_bytes × (backup_count + 1)` (default ~4 MB). Lower `max_bytes` if debug mode fills logs quickly — debug logs per-frame detection stats.
 
 ---
 
@@ -381,9 +388,25 @@ Options: `--count 5` to override `enrollment.capture_count` in config.
 
 Success example: `Step 2 passed. Enrolled Todd: 5 photos in data/known_faces/todd`
 
-Photos are saved as `001.jpg`, `002.jpg`, … under `data/known_faces/<slug>/`. The person is registered in `config/people.yaml`.
+Photos are saved as `001.jpg`, `002.jpg`, … under `data/known_faces/<slug>/`, with stacked 128-d embeddings in `encodings.npy`. The person is registered in `config/people.yaml`.
 
-If `python3-opencv` is installed on the Pi, each frame is checked for exactly one face. Enrollment still works without OpenCV (size check only).
+Optional per-person greeting in `config/people.yaml`:
+
+```yaml
+people:
+  - name: Todd
+    face_dir: data/known_faces/todd
+    greeting: "Welcome home, Todd!"
+```
+
+Recognition tolerance (lower = stricter matching) in `config/config.yaml`:
+
+```yaml
+recognition:
+  tolerance: 0.6
+```
+
+If `python3-opencv` is installed on the Pi, each frame is checked for exactly one face during enrollment.
 
 ---
 
@@ -599,13 +622,12 @@ sudo usermod -aG video $USER
 
 See [docs/roadmap.md](docs/roadmap.md) for the full roadmap:
 
-1. Real face recognition (identify known people)
-2. Real enrollment capture from settings UI
-3. Per-person greetings and cooldown
-4. FastAPI admin portal
-5. systemd auto-start
-6. PIR motion loop (optional)
-7. Piper TTS upgrade
+1. Per-person cooldown overrides
+2. Require multiple matching frames before greeting
+3. FastAPI admin portal
+4. systemd auto-start
+5. PIR motion loop (optional)
+6. Piper TTS upgrade
 
 ---
 
@@ -614,14 +636,14 @@ See [docs/roadmap.md](docs/roadmap.md) for the full roadmap:
 - [x] Add touchscreen kiosk UI (Hosyond 5" DSI)
 - [x] Animated face with blinking eyes and talking mouth
 - [x] Live camera preview with face detection boxes
-- [x] Settings screen for face CRUD (stub enrollment)
-- [ ] Add real face recognition (`face_recognition`, DeepFace, or InsightFace)
-- [ ] Generate face embeddings
-- [ ] Add confidence threshold
+- [x] Settings screen for face CRUD + live enrollment
+- [x] Face recognition via `face_recognition` (dlib)
+- [x] Generate face embeddings (`encodings.npy`)
+- [x] Confidence threshold (`recognition.tolerance`)
 - [ ] Require multiple matching frames before greeting
-- [ ] Add per-person greeting messages
-- [ ] Add per-person cooldown
-- [ ] Real enrollment photo capture from settings UI
+- [x] Per-person greeting messages (`greeting:` in people.yaml)
+- [ ] Per-person cooldown
+- [x] Enrollment photo capture from settings UI
 - [ ] Add local FastAPI admin portal
 - [ ] Add systemd service for boot startup
 - [ ] Add privacy mode / mute button

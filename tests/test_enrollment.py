@@ -9,6 +9,7 @@ import yaml
 
 from pi_face_greeter.enroll import run_enroll
 from pi_face_greeter.enrollment import (
+    enroll_from_frames,
     enroll_person,
     register_person,
     slugify_name,
@@ -53,13 +54,6 @@ def test_enroll_person_saves_photos(tmp_path: Path, monkeypatch) -> None:
     mock_camera = MagicMock()
     mock_camera.capture_frame.return_value = frame
 
-    def fake_save(_frame: np.ndarray, path: Path) -> Path:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(b"x" * 2000)
-        return path
-
-    mock_camera.save_frame.side_effect = fake_save
-
     camera_cfg = {"enabled": True, "backend": "picamera2"}
     enrollment_cfg = {
         "capture_count": 2,
@@ -67,17 +61,55 @@ def test_enroll_person_saves_photos(tmp_path: Path, monkeypatch) -> None:
         "known_faces_dir": str(tmp_path / "data" / "known_faces"),
     }
 
+    fake_encoding = np.ones(128, dtype=np.float64)
+
     with (
         patch("pi_face_greeter.enrollment.create_camera", return_value=mock_camera),
         patch("pi_face_greeter.enrollment._validate_frame"),
+        patch("pi_face_greeter.enrollment.detect_faces", return_value=[(100, 100, 80, 80)]),
+        patch("pi_face_greeter.enrollment.encode_face", return_value=fake_encoding),
+        patch("pi_face_greeter.enrollment._save_frame_jpeg"),
         patch("pi_face_greeter.enrollment.time.sleep"),
     ):
         person_dir = enroll_person("Todd", camera_cfg, enrollment_cfg)
 
     assert person_dir.name == "todd"
-    assert (person_dir / "001.jpg").exists()
-    assert (person_dir / "002.jpg").exists()
+    assert (person_dir / "encodings.npy").exists()
     mock_camera.close.assert_called_once()
+
+
+def test_enroll_from_frames_saves_photos_and_encodings(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr("pi_face_greeter.enrollment.PROJECT_ROOT", tmp_path)
+    people_file = tmp_path / "config" / "people.yaml"
+    people_file.parent.mkdir(parents=True)
+    people_file.write_text("people: []\n", encoding="utf-8")
+    monkeypatch.setattr("pi_face_greeter.enrollment.PEOPLE_YAML", people_file)
+
+    frame = np.zeros((480, 640, 3), dtype=np.uint8)
+    enrollment_cfg = {
+        "known_faces_dir": str(tmp_path / "data" / "known_faces"),
+        "minimum_photos": 1,
+    }
+    fake_encoding = np.arange(128, dtype=np.float64)
+
+    with (
+        patch(
+            "pi_face_greeter.enrollment.detect_faces",
+            return_value=[(100, 100, 80, 80)],
+        ),
+        patch("pi_face_greeter.enrollment.encode_face", return_value=fake_encoding),
+        patch("pi_face_greeter.enrollment._save_frame_jpeg") as mock_save,
+    ):
+        result = enroll_from_frames("Todd", [frame, frame], enrollment_cfg)
+
+    assert result["photo_count"] == 2
+    assert result["face_dir"].name == "todd"
+    assert mock_save.call_count == 2
+    encodings = np.load(result["face_dir"] / "encodings.npy")
+    assert encodings.shape == (2, 128)
+
+    data = yaml.safe_load(people_file.read_text(encoding="utf-8"))
+    assert data["people"][0]["name"] == "Todd"
 
 
 def test_run_enroll_success(tmp_path: Path) -> None:
