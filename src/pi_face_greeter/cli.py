@@ -7,6 +7,7 @@ import time
 from pi_face_greeter.camera import create_camera
 from pi_face_greeter.config_loader import load_config
 from pi_face_greeter.logger import setup_logging
+from pi_face_greeter.ollama_client import health_check
 from pi_face_greeter.pir_sensor import PIRSensor
 from pi_face_greeter.tts import speak
 
@@ -99,4 +100,49 @@ def test_pir() -> int:
     if motion_count == 0:
         print("No motion detected. Check wiring and 3.3V power.")
         return 1
+    return 0
+
+
+def test_ollama() -> int:
+    from pi_face_greeter.app.conversation import generate_greeting
+    from pi_face_greeter.app.greeting import build_greeting
+
+    config = load_config()
+    setup_logging(level=config.get("logging", {}).get("level", "INFO"))
+
+    ollama_cfg = config.get("ollama", {})
+    base_url = str(ollama_cfg.get("base_url", "http://localhost:11434"))
+    model = str(ollama_cfg.get("model", "llama3.2:1b"))
+    timeout = float(ollama_cfg.get("timeout_seconds", 8))
+
+    print("Ollama SLM test")
+    print(f"Base URL: {base_url}")
+    print(f"Model: {model}\n")
+
+    if not health_check(base_url, timeout=min(timeout, 3.0)):
+        print(
+            "Ollama is not reachable. Install with ./scripts/setup_system.sh, "
+            "pull the model with ./scripts/setup_venv.sh, and ensure the service is running.",
+            file=sys.stderr,
+        )
+        return 1
+
+    test_cfg = {**ollama_cfg, "enabled": True}
+    fallback = build_greeting("Todd", ask_how_are_you=False)
+    try:
+        greeting = generate_greeting("Todd", ollama_cfg=test_cfg, fallback_text=fallback)
+    except Exception as exc:
+        print(f"Ollama test failed: {exc}", file=sys.stderr)
+        logger.exception("Ollama test failed")
+        return 1
+
+    if greeting == fallback:
+        print(
+            "Ollama returned the fallback greeting. Check logs and model availability.",
+            file=sys.stderr,
+        )
+        return 1
+
+    print(f"Generated greeting: {greeting}")
+    print("Ollama test complete.")
     return 0

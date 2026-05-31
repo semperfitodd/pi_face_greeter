@@ -6,6 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from pi_face_greeter.app.conversation import generate_greeting
 from pi_face_greeter.app.greeting import build_greeting
 from pi_face_greeter.camera import CameraBackend, create_camera
 from pi_face_greeter.config_loader import load_config
@@ -31,9 +32,11 @@ def run_greet_cycle(
     tts_cfg: dict[str, Any],
     camera: CameraBackend | None = None,
     filename_prefix: str = "motion",
+    ollama_cfg: dict[str, Any] | None = None,
 ) -> tuple[CameraBackend | None, Path | None]:
     frame_path = None
     active_camera = camera
+    ollama = ollama_cfg or {}
 
     if camera_cfg.get("enabled", True):
         if active_camera is None:
@@ -47,19 +50,21 @@ def run_greet_cycle(
         ask_how_are_you = bool(tts_cfg.get("ask_how_are_you", True))
         if name:
             logger.info("Recognized %s (confidence %.2f)", name, confidence)
-            greeting = build_greeting(
+            fallback = build_greeting(
                 name,
                 get_person_greeting(name),
                 ask_how_are_you=ask_how_are_you,
             )
         else:
-            greeting = build_greeting(None, ask_how_are_you=ask_how_are_you)
+            fallback = build_greeting(None, ask_how_are_you=ask_how_are_you)
+        greeting = generate_greeting(name, ollama_cfg=ollama, fallback_text=fallback)
     else:
         logger.info("Camera disabled in config")
-        greeting = tts_cfg.get(
+        fallback = tts_cfg.get(
             "placeholder_greeting",
             "Hello. Face recognition is not enabled yet.",
         )
+        greeting = generate_greeting(None, ollama_cfg=ollama, fallback_text=fallback)
 
     speak_from_config(greeting, tts_cfg)
 
@@ -81,6 +86,7 @@ def main() -> int:
     pir_cfg = config.get("pir", {})
     camera_cfg = config.get("camera", {})
     tts_cfg = config.get("tts", {})
+    ollama_cfg = config.get("ollama", {})
 
     if not pir_cfg.get("enabled", False):
         logger.error(
@@ -119,7 +125,11 @@ def main() -> int:
 
             try:
                 camera, frame_path = run_greet_cycle(
-                    camera_cfg, tts_cfg, camera=camera, filename_prefix="motion"
+                    camera_cfg,
+                    tts_cfg,
+                    camera=camera,
+                    filename_prefix="motion",
+                    ollama_cfg=ollama_cfg,
                 )
             except Exception:
                 logger.exception("Greet cycle failed")

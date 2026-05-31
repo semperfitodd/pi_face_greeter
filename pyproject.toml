@@ -37,6 +37,7 @@ pi-face-greeter-greet-once = "pi_face_greeter.greet_once:main"
 pi-face-greeter-test-camera = "pi_face_greeter.cli:test_camera"
 pi-face-greeter-test-tts = "pi_face_greeter.cli:test_tts"
 pi-face-greeter-test-pir = "pi_face_greeter.cli:test_pir"
+pi-face-greeter-test-ollama = "pi_face_greeter.cli:test_ollama"
 pi-face-greeter-app = "pi_face_greeter.app.main:main"
 
 [tool.setuptools.packages.find]

@@ -11,6 +11,7 @@ from kivy.uix.screenmanager import Screen
 
 from pi_face_greeter.app.camera_preview import CameraPreview
 from pi_face_greeter.app.camera_source import CameraSource
+from pi_face_greeter.app.conversation import generate_greeting
 from pi_face_greeter.app.face_widget import AnimatedFace
 from pi_face_greeter.app.greeting import build_greeting
 from pi_face_greeter.app.identity_vote import PENDING, IdentityVoter
@@ -28,12 +29,14 @@ class FaceScreen(Screen):
         camera_source: CameraSource,
         tts_cfg: dict[str, Any],
         ui_cfg: dict[str, Any],
+        ollama_cfg: dict[str, Any] | None = None,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
         self.camera_source = camera_source
         self.tts_cfg = tts_cfg
         self.ui_cfg = ui_cfg
+        self._ollama_cfg = ollama_cfg or {}
 
         cooldown_seconds = float(ui_cfg.get("greet_cooldown_seconds", 30))
         self._cooldown = PerPersonCooldown(cooldown_seconds)
@@ -170,32 +173,38 @@ class FaceScreen(Screen):
         self._reset_presence_state()
         self._cooldown.mark_triggered(cooldown_key(name))
 
-        greeting = build_greeting(
-            name,
-            get_person_greeting(name),
-            ask_how_are_you=self._ask_how_are_you,
-        )
         if name:
             logger.info("Recognized %s (confidence %.2f)", name, confidence)
         else:
             logger.info("Unknown face detected; using friend greeting")
-        logger.info("Speaking greeting: %s", greeting)
-
-        if self._status_label is not None:
-            self._status_label.text = greeting
-
-        if self._animated_face is not None:
-            self._animated_face.start_talking()
 
         thread = threading.Thread(
             target=self._speak_and_finish,
-            args=(greeting,),
+            args=(name, get_person_greeting(name)),
             daemon=True,
         )
         thread.start()
 
-    def _speak_and_finish(self, greeting: str) -> None:
+    def _on_greeting_ready(self, greeting: str) -> None:
+        if self._status_label is not None:
+            self._status_label.text = greeting
+        if self._animated_face is not None:
+            self._animated_face.start_talking()
+
+    def _speak_and_finish(self, name: str | None, custom_greeting: str | None) -> None:
         try:
+            fallback = build_greeting(
+                name,
+                custom_greeting,
+                ask_how_are_you=self._ask_how_are_you,
+            )
+            greeting = generate_greeting(
+                name,
+                ollama_cfg=self._ollama_cfg,
+                fallback_text=fallback,
+            )
+            logger.info("Speaking greeting: %s", greeting)
+            Clock.schedule_once(lambda _dt: self._on_greeting_ready(greeting), 0)
             speak_from_config(greeting, self.tts_cfg)
         except Exception:
             logger.exception("TTS failed")

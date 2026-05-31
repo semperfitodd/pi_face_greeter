@@ -78,6 +78,8 @@ drawio -x -f png -o architecture/architecture.png architecture/architecture.draw
 | PIR | `src/pi_face_greeter/pir_sensor.py` | gpiozero wrapper for AM312 |
 | Camera | `src/pi_face_greeter/camera.py` | Picamera2 (CSI) backend |
 | TTS | `src/pi_face_greeter/tts.py` | Piper neural TTS (espeak-ng fallback) |
+| Conversation | `src/pi_face_greeter/app/conversation.py` | Ollama SLM greetings (fallback to canned phrases) |
+| Ollama client | `src/pi_face_greeter/ollama_client.py` | HTTP client for local Ollama |
 | Config | `config/config.yaml` | Runtime settings |
 
 **Camera path for this build:** You have a **Raspberry Pi Camera Module 3** (CSI). Use **Picamera2** (`camera.backend: picamera2` in config). JPEG saving uses Pillow (installed via pip).
@@ -266,14 +268,14 @@ Quick setup from the project root on the Pi:
 ```bash
 cd ~/pi_face_greeter
 git pull
-./scripts/setup_pi_apt.sh
-# log out and back in after apt setup (group membership)
+./scripts/setup_system.sh
+# log out and back in after system setup (group membership + Ollama)
 ./scripts/setup_venv.sh
 source .venv/bin/activate
 pi-face-greeter-app
 ```
 
-`setup_venv.sh` installs the optional `[recognition]` extra (`face_recognition` + dlib) and `[voice]` extra (Piper TTS), then downloads the Piper voice model. The dlib compile can take 30+ minutes on a Pi — run it once and leave the terminal open.
+`setup_system.sh` installs apt packages and Ollama. `setup_venv.sh` installs the optional `[recognition]` extra (`face_recognition` + dlib), `[voice]` extra (Piper TTS), downloads the Piper voice model, and pulls the Ollama SLM. The dlib compile can take 30+ minutes on a Pi — run it once and leave the terminal open.
 
 Or update an existing install:
 
@@ -283,7 +285,7 @@ git pull
 source .venv/bin/activate
 pip install -e ".[recognition]"
 pip install -e ".[voice]"
-./scripts/download_piper_voice.sh
+./scripts/setup_venv.sh
 ```
 
 Install system packages manually (once on the Pi):
@@ -302,7 +304,7 @@ sudo apt install -y \
 sudo usermod -aG video,gpio $USER
 ```
 
-Or run `./scripts/setup_pi_apt.sh` to install the packages above automatically.
+Or run `./scripts/setup_system.sh` to install the packages and Ollama automatically.
 
 Create the venv on the Pi with system site packages so apt libraries are visible:
 
@@ -311,7 +313,7 @@ python3 -m venv --system-site-packages .venv
 source .venv/bin/activate
 pip install -e ".[recognition]"
 pip install -e ".[voice]"
-./scripts/download_piper_voice.sh
+./scripts/setup_venv.sh
 ```
 
 Or run `./scripts/setup_venv.sh` to create the venv and install the package.
@@ -357,12 +359,37 @@ One-time setup on the Pi (included in `./scripts/setup_venv.sh`):
 
 ```bash
 pip install -e ".[voice]"
-./scripts/download_piper_voice.sh   # downloads ~63MB model to data/voices/
+./scripts/setup_venv.sh   # downloads ~63MB Piper model to data/voices/
 ```
 
 The voice model is downloaded **once per Pi**, not per face or greeting. To swap voices, change `tts.piper.model` and download a different `.onnx` from [rhasspy/piper-voices](https://huggingface.co/rhasspy/piper-voices).
 
 Use `tts.engine: espeak` to force the old robotic voice. Toggle `tts.ask_how_are_you: false` to skip the follow-up question.
+
+### Local conversation (Ollama SLM)
+
+When enabled, the greeter asks a local **Ollama** small language model for a short, context-aware spoken greeting (name + time of day) instead of the canned phrases. Output is still spoken through Piper TTS. If Ollama is disabled or unreachable, behavior falls back to `build_greeting` automatically.
+
+One-time setup (included in `./scripts/setup_system.sh` and `./scripts/setup_venv.sh`):
+
+```bash
+./scripts/setup_system.sh   # installs Ollama (log out/in after)
+./scripts/setup_venv.sh     # pulls llama3.2:1b (or OLLAMA_MODEL=...)
+```
+
+Enable in `config/config.yaml`:
+
+```yaml
+ollama:
+  enabled: true
+  model: llama3.2:1b
+```
+
+Smoke test:
+
+```bash
+pi-face-greeter-test-ollama
+```
 
 ### Debugging / sharing logs
 
@@ -656,8 +683,9 @@ sudo usermod -aG video $USER
 See [docs/roadmap.md](docs/roadmap.md) for the full roadmap:
 
 1. FastAPI admin portal
-2. systemd auto-start
-3. PIR motion loop (optional)
+2. Ollama SLM — light local conversation
+3. systemd auto-start
+4. PIR motion loop (optional)
 
 ---
 
@@ -675,6 +703,7 @@ See [docs/roadmap.md](docs/roadmap.md) for the full roadmap:
 - [x] Per-person cooldown (`cooldown_seconds:` in people.yaml)
 - [x] Enrollment photo capture from settings UI
 - [x] Piper TTS for natural voice (espeak fallback)
+- [x] Ollama SLM for light local conversation (opt-in; see [docs/roadmap.md](docs/roadmap.md))
 - [ ] Add local FastAPI admin portal
 - [ ] Add systemd service for boot startup
 - [ ] Add privacy mode / mute button

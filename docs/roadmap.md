@@ -34,6 +34,21 @@
 - [ ] Privacy mode / mute button
 - [ ] Optional logging to SQLite
 
+## Milestone 5: Local Conversation (Ollama SLM)
+
+One-way spoken greetings via a local SLM on the Pi 5. No microphone or cloud API.
+
+- [x] Install Ollama on Raspberry Pi 5 (`scripts/setup_system.sh`)
+- [x] Pull a Pi-friendly SLM via `scripts/setup_venv.sh` (default `llama3.2:1b`)
+- [x] Add `ollama` config section (`enabled`, `base_url`, `model`, `timeout_seconds`, `max_tokens`)
+- [x] Ollama client module (HTTP to `localhost:11434`; health check; graceful fallback)
+- [x] Context-aware prompts: known name, time of day — short replies (1–2 sentences)
+- [x] Greeting flow in kiosk and PIR loop: SLM text → Piper TTS → cooldown → idle
+- [x] CLI smoke test (`pi-face-greeter-test-ollama`)
+- [ ] Confirm conversation latency and stability on real Pi 5 hardware
+
+**Out of scope for v1:** open-ended multi-turn chat, wake word, STT, or cloud LLMs.
+
 ## Final Step: Motion (PIR) — optional
 
 - [x] PIR sensor module and test script
@@ -53,5 +68,6 @@
 ## Enhancements
 
 - [x] Piper TTS for natural voice (replace espeak-ng)
+- [x] Ollama SLM for light local conversation (see Milestone 5)
 - [ ] Optional AWS sync for logs or face data
 - [ ] Remote monitoring / alerts

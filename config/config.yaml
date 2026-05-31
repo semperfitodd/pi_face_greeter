@@ -58,6 +58,14 @@ tts:
     length_scale: 1.0
   placeholder_greeting: "Hello. Face recognition is not enabled yet."
 
+ollama:
+  enabled: false
+  base_url: http://localhost:11434
+  model: llama3.2:1b
+  timeout_seconds: 8
+  max_tokens: 60
+  temperature: 0.7
+
 logging:
   level: INFO
   file: data/logs/greeter.log

@@ -64,6 +64,7 @@ class PiFaceGreeterApp(App):
         ui_cfg = self.config_data.get("ui", {})
         camera_cfg = self.config_data.get("camera", {})
         tts_cfg = self.config_data.get("tts", {})
+        ollama_cfg = self.config_data.get("ollama", {})
         enrollment_cfg = self.config_data.get("enrollment", {})
         detection_cfg = self.config_data.get("detection", {})
 
@@ -92,6 +93,7 @@ class PiFaceGreeterApp(App):
             camera_source=self.camera_source,
             tts_cfg=tts_cfg,
             ui_cfg=ui_cfg,
+            ollama_cfg=ollama_cfg,
         )
         settings_screen = SettingsScreen(
             name="settings",

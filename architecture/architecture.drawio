@@ -71,7 +71,7 @@
         <mxCell id="mod_camera" value="camera.py&#xa;Picamera2 CSI" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="pkg_group">
           <mxGeometry x="20" y="110" width="130" height="50" as="geometry" />
         </mxCell>
-        <mxCell id="mod_tts" value="tts.py&#xa;espeak-ng" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="pkg_group">
+        <mxCell id="mod_tts" value="tts.py&#xa;Piper + espeak" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="pkg_group">
           <mxGeometry x="170" y="110" width="120" height="50" as="geometry" />
         </mxCell>
         <mxCell id="mod_pir" value="pir_sensor.py&#xa;gpiozero GPIO17" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;dashed=1;" vertex="1" parent="pkg_group">
@@ -83,10 +83,16 @@
         <mxCell id="mod_cooldown" value="cooldown.py" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;dashed=1;" vertex="1" parent="pkg_group">
           <mxGeometry x="170" y="175" width="120" height="40" as="geometry" />
         </mxCell>
+        <mxCell id="mod_conversation" value="app/conversation.py" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="pkg_group">
+          <mxGeometry x="310" y="175" width="130" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="mod_ollama" value="ollama_client.py" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="pkg_group">
+          <mxGeometry x="450" y="175" width="130" height="40" as="geometry" />
+        </mxCell>
 
         <!-- Hardware -->
         <mxCell id="hw_group" value="Hardware (Pi 5)" style="swimlane;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontStyle=1" vertex="1" parent="1">
-          <mxGeometry x="40" y="520" width="780" height="120" as="geometry" />
+          <mxGeometry x="40" y="520" width="980" height="120" as="geometry" />
         </mxCell>
         <mxCell id="hw_cam" value="Camera Module 3&#xa;(CSI / Picamera2)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="hw_group">
           <mxGeometry x="30" y="40" width="160" height="60" as="geometry" />
@@ -94,11 +100,14 @@
         <mxCell id="hw_usb" value="USB Sound Card&#xa;+ 8Ω Speaker" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="hw_group">
           <mxGeometry x="220" y="40" width="160" height="60" as="geometry" />
         </mxCell>
-        <mxCell id="hw_pir" value="AM312 PIR&#xa;GPIO17 (final step)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;dashed=1;" vertex="1" parent="hw_group">
+        <mxCell id="hw_ollama" value="Ollama SLM&#xa;(local, optional)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="hw_group">
           <mxGeometry x="410" y="40" width="160" height="60" as="geometry" />
         </mxCell>
-        <mxCell id="hw_dsi" value="5&quot; DSI Touchscreen&#xa;(future UI)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#999999;dashed=1;" vertex="1" parent="hw_group">
+        <mxCell id="hw_pir" value="AM312 PIR&#xa;GPIO17 (final step)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;dashed=1;" vertex="1" parent="hw_group">
           <mxGeometry x="600" y="40" width="160" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="hw_dsi" value="5&quot; DSI Touchscreen&#xa;(kiosk UI)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="hw_group">
+          <mxGeometry x="790" y="40" width="160" height="60" as="geometry" />
         </mxCell>
 
         <!-- Outputs -->
@@ -140,6 +149,15 @@
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="e10" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="mod_tts" target="hw_usb">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_ollama1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="mod_conversation" target="mod_ollama">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_ollama2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="mod_ollama" target="hw_ollama">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_ollama3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="mod_conversation" target="mod_tts">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="e11" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="mod_camera" target="out_jpeg">

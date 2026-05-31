@@ -6,7 +6,8 @@ globs: "**/*"
 # Pi Face Greeter
 
 - **Mac dev:** `pip install -e ".[dev]"` then `pytest`. No Picamera2/gpiozero hardware tests on Mac.
-- **Pi deploy:** `pip install -e .` in venv with `--system-site-packages`. Apt for picamera2, gpiozero, espeak-ng.
+- **Pi deploy:** `./scripts/setup_system.sh` then log out/in, then `./scripts/setup_venv.sh`. Venv uses `--system-site-packages`. Apt for picamera2, gpiozero, espeak-ng; Ollama for optional SLM greetings.
+- **Ollama:** opt-in (`ollama.enabled: false` by default). Greeting generation runs off the UI thread; always falls back to `build_greeting` when Ollama is unavailable.
 - **Milestone order:** Kiosk app → real recognition → real enrollment from UI → **optional** PIR/motion. CLI validators remain for hardware checks.
 - **Validators/enrollment:** quiet terminal output; full logs in `data/logs/greeter.log`.
 - **Config:** YAML in `config/`. No hardcoded secrets or machine-specific ALSA paths in commits.
