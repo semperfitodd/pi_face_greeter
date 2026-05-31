@@ -59,7 +59,7 @@ tts:
   placeholder_greeting: "Hello. Face recognition is not enabled yet."
 
 ollama:
-  enabled: false
+  enabled: true
   base_url: http://localhost:11434
   model: llama3.2:1b
   timeout_seconds: 30          # cold model load on Pi can exceed 8s
