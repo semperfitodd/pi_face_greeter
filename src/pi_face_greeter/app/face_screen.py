@@ -13,6 +13,7 @@ from pi_face_greeter.app.camera_preview import CameraPreview
 from pi_face_greeter.app.camera_source import CameraSource
 from pi_face_greeter.app.face_widget import AnimatedFace
 from pi_face_greeter.app.greeting import build_greeting
+from pi_face_greeter.app.presence import should_trigger_greeting
 from pi_face_greeter.cooldown import CooldownGate
 from pi_face_greeter.face_recognition import identify
 from pi_face_greeter.tts import speak_from_config
@@ -43,15 +44,24 @@ class FaceScreen(Screen):
         self._tick_event = None
 
         self._build_ui()
+        Clock.schedule_once(self._start_presence_watch, 0)
 
-    def on_enter(self, *_args) -> None:
+    def _start_presence_watch(self, _dt=None) -> None:
         if self._tick_event is None:
             self._tick_event = Clock.schedule_interval(self._tick, 1 / 10)
+            logger.debug("Presence watch started")
 
-    def on_leave(self, *_args) -> None:
+    def stop_presence_watch(self) -> None:
         if self._tick_event is not None:
             self._tick_event.cancel()
             self._tick_event = None
+            logger.debug("Presence watch stopped")
+
+    def on_enter(self, *_args) -> None:
+        self._start_presence_watch()
+
+    def on_leave(self, *_args) -> None:
+        self.stop_presence_watch()
 
     def _build_ui(self) -> None:
         root = FloatLayout()
@@ -112,13 +122,24 @@ class FaceScreen(Screen):
                 self._status_label.text = ""
             return
 
-        if self._consecutive_face_frames < self._presence_frames_required:
-            return
-
-        if not self._cooldown.can_trigger():
-            remaining = int(self._cooldown.seconds_remaining())
-            if self._status_label is not None:
-                self._status_label.text = f"Cooldown ({remaining}s)"
+        if not should_trigger_greeting(
+            self._consecutive_face_frames,
+            self._presence_frames_required,
+            self._cooldown,
+        ):
+            if (
+                self._consecutive_face_frames >= self._presence_frames_required
+                and not self._cooldown.can_trigger()
+            ):
+                remaining = int(self._cooldown.seconds_remaining())
+                if self._status_label is not None:
+                    self._status_label.text = f"Cooldown ({remaining}s)"
+            elif self._consecutive_face_frames < self._presence_frames_required:
+                logger.debug(
+                    "Face detected (%d/%d frames)",
+                    self._consecutive_face_frames,
+                    self._presence_frames_required,
+                )
             return
 
         self._trigger_greeting(snapshot.frame)
@@ -134,6 +155,7 @@ class FaceScreen(Screen):
             logger.info("Recognized %s (confidence %.2f)", name, confidence)
         else:
             logger.info("Unknown face detected; using friend greeting")
+        logger.info("Speaking greeting: %s", greeting)
 
         if self._status_label is not None:
             self._status_label.text = greeting
