@@ -63,6 +63,51 @@ def test_request_raises_on_http_error() -> None:
             ollama_client._request("http://localhost:11434/api/generate")
 
 
+def test_generate_passes_keep_alive() -> None:
+    with patch(
+        "pi_face_greeter.ollama_client._request",
+        return_value={"response": "Hello"},
+    ) as mock_request:
+        ollama_client.generate(
+            "Say hello",
+            base_url="http://localhost:11434",
+            model="llama3.2:1b",
+            keep_alive="10m",
+        )
+
+    body = mock_request.call_args.kwargs["body"]
+    assert body["keep_alive"] == "10m"
+
+
+def test_warmup_calls_generate_with_minimal_tokens() -> None:
+    with patch("pi_face_greeter.ollama_client.generate") as mock_generate:
+        ollama_client.warmup(
+            base_url="http://localhost:11434",
+            model="llama3.2:1b",
+            timeout=60.0,
+            keep_alive="10m",
+        )
+
+    mock_generate.assert_called_once_with(
+        "Hi",
+        base_url="http://localhost:11434",
+        model="llama3.2:1b",
+        timeout=60.0,
+        max_tokens=1,
+        temperature=0.0,
+        keep_alive="10m",
+    )
+
+
+def test_request_timeout_error_message() -> None:
+    import urllib.error
+
+    error = urllib.error.URLError("timed out")
+    with patch("urllib.request.urlopen", side_effect=error):
+        with pytest.raises(RuntimeError, match="timed out after"):
+            ollama_client._request("http://localhost:11434/api/generate", timeout=8.0)
+
+
 def test_request_parses_json_body() -> None:
     payload = json.dumps({"response": "hello"}).encode("utf-8")
     response = MagicMock()

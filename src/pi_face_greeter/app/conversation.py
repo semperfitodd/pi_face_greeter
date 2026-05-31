@@ -56,6 +56,39 @@ def _sanitize(text: str) -> str:
     return cleaned
 
 
+def _ollama_settings(ollama_cfg: dict[str, Any]) -> dict[str, Any]:
+    warmup_timeout = float(ollama_cfg.get("warmup_timeout_seconds", 60))
+    return {
+        "base_url": str(ollama_cfg.get("base_url", "http://localhost:11434")),
+        "model": str(ollama_cfg.get("model", "llama3.2:1b")),
+        "timeout": float(ollama_cfg.get("timeout_seconds", 30)),
+        "warmup_timeout": warmup_timeout,
+        "keep_alive": ollama_cfg.get("keep_alive", "10m"),
+    }
+
+
+def warmup_ollama(ollama_cfg: dict[str, Any]) -> None:
+    if not ollama_cfg.get("enabled", False):
+        return
+    if not ollama_cfg.get("warmup_on_startup", True):
+        return
+
+    settings = _ollama_settings(ollama_cfg)
+    keep_alive = settings["keep_alive"]
+    if keep_alive is not None:
+        keep_alive = str(keep_alive)
+
+    try:
+        ollama_client.warmup(
+            base_url=settings["base_url"],
+            model=settings["model"],
+            timeout=settings["warmup_timeout"],
+            keep_alive=keep_alive,
+        )
+    except Exception:
+        logger.warning("Ollama warmup failed; first greeting may be slow", exc_info=True)
+
+
 def generate_greeting(
     name: str | None,
     *,
@@ -66,11 +99,10 @@ def generate_greeting(
     if not ollama_cfg.get("enabled", False):
         return fallback_text
 
-    base_url = str(ollama_cfg.get("base_url", "http://localhost:11434"))
-    model = str(ollama_cfg.get("model", "llama3.2:1b"))
-    timeout = float(ollama_cfg.get("timeout_seconds", 8))
-    max_tokens = int(ollama_cfg.get("max_tokens", 60))
-    temperature = float(ollama_cfg.get("temperature", 0.7))
+    settings = _ollama_settings(ollama_cfg)
+    keep_alive = settings["keep_alive"]
+    if keep_alive is not None:
+        keep_alive = str(keep_alive)
 
     moment = now or datetime.now()
     prompt = _build_prompt(name, _time_of_day(moment))
@@ -78,11 +110,12 @@ def generate_greeting(
     try:
         raw = ollama_client.generate(
             prompt,
-            base_url=base_url,
-            model=model,
-            timeout=timeout,
-            max_tokens=max_tokens,
-            temperature=temperature,
+            base_url=settings["base_url"],
+            model=settings["model"],
+            timeout=settings["timeout"],
+            max_tokens=int(ollama_cfg.get("max_tokens", 60)),
+            temperature=float(ollama_cfg.get("temperature", 0.7)),
+            keep_alive=keep_alive,
         )
         sanitized = _sanitize(raw)
         if not sanitized:

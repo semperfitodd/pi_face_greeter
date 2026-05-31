@@ -383,6 +383,9 @@ Enable in `config/config.yaml`:
 ollama:
   enabled: true
   model: llama3.2:1b
+  timeout_seconds: 30        # increase if cold starts still time out on Pi
+  warmup_on_startup: true    # loads model when kiosk starts
+  keep_alive: 10m             # keeps model in RAM while app runs
 ```
 
 Smoke test:

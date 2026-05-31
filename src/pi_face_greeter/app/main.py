@@ -3,11 +3,13 @@ from __future__ import annotations
 import logging
 import os
 import sys
+import threading
 
 from kivy.app import App
 from kivy.uix.carousel import Carousel
 
 from pi_face_greeter.app.camera_source import CameraSource
+from pi_face_greeter.app.conversation import warmup_ollama
 from pi_face_greeter.app.face_screen import FaceScreen
 from pi_face_greeter.app.settings_screen import SettingsScreen
 from pi_face_greeter.config_loader import load_config
@@ -69,6 +71,15 @@ class PiFaceGreeterApp(App):
         detection_cfg = self.config_data.get("detection", {})
 
         configure_recognizer(self.config_data.get("recognition", {}))
+
+        if ollama_cfg.get("enabled", False):
+            logger.info("Ollama greetings enabled (model: %s)", ollama_cfg.get("model", "llama3.2:1b"))
+            threading.Thread(
+                target=warmup_ollama,
+                args=(ollama_cfg,),
+                name="ollama-warmup",
+                daemon=True,
+            ).start()
 
         if ui_cfg.get("fullscreen", True):
             from kivy.core.window import Window

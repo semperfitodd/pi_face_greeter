@@ -63,6 +63,22 @@ def test_build_prompt_unknown_visitor() -> None:
     assert "evening" in prompt
 
 
+def test_warmup_ollama_skips_when_disabled() -> None:
+    from pi_face_greeter.app.conversation import warmup_ollama
+
+    with patch("pi_face_greeter.ollama_client.warmup") as mock_warmup:
+        warmup_ollama({"enabled": False})
+    mock_warmup.assert_not_called()
+
+
+def test_warmup_ollama_loads_model_when_enabled() -> None:
+    from pi_face_greeter.app.conversation import warmup_ollama
+
+    with patch("pi_face_greeter.ollama_client.warmup") as mock_warmup:
+        warmup_ollama({"enabled": True, "model": "llama3.2:1b"})
+    mock_warmup.assert_called_once()
+
+
 def test_sanitize_strips_quotes_and_limits_sentences() -> None:
     text = '"Hello there. How are you? Nice to see you again."'
     assert _sanitize(text) == "Hello there. How are you?"
