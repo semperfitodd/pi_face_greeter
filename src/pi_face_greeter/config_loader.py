@@ -34,6 +34,10 @@ def _resolve_paths(config: dict[str, Any]) -> None:
     if known_faces_dir := enrollment_cfg.get("known_faces_dir"):
         enrollment_cfg["known_faces_dir"] = str(_resolve_project_path(known_faces_dir))
 
+    diagnostics_cfg = config.get("diagnostics", {})
+    if snapshot_dir := diagnostics_cfg.get("snapshot_dir"):
+        diagnostics_cfg["snapshot_dir"] = str(_resolve_project_path(snapshot_dir))
+
 
 def _resolve_project_path(value: str) -> Path:
     path = Path(value)

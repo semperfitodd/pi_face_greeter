@@ -9,9 +9,11 @@ def setup_logging(
     level: str = "INFO",
     log_file: str | Path | None = None,
     console: bool = True,
+    capture_loggers: list[str] | None = None,
 ) -> logging.Logger:
+    log_level = getattr(logging, level.upper(), logging.INFO)
     logger = logging.getLogger("pi_face_greeter")
-    logger.setLevel(getattr(logging, level.upper(), logging.INFO))
+    logger.setLevel(log_level)
     logger.handlers.clear()
     logger.propagate = False
 
@@ -20,10 +22,12 @@ def setup_logging(
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 
+    handlers: list[logging.Handler] = []
+
     if console:
         console_handler = logging.StreamHandler()
         console_handler.setFormatter(formatter)
-        logger.addHandler(console_handler)
+        handlers.append(console_handler)
 
     if log_file:
         path = Path(log_file)
@@ -35,6 +39,18 @@ def setup_logging(
             encoding="utf-8",
         )
         file_handler.setFormatter(formatter)
-        logger.addHandler(file_handler)
+        handlers.append(file_handler)
+
+    for handler in handlers:
+        logger.addHandler(handler)
+
+    if capture_loggers:
+        for name in capture_loggers:
+            extra_logger = logging.getLogger(name)
+            extra_logger.handlers.clear()
+            extra_logger.setLevel(log_level)
+            extra_logger.propagate = False
+            for handler in handlers:
+                extra_logger.addHandler(handler)
 
     return logger

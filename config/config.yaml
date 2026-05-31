@@ -11,6 +11,17 @@ ui:
   preview_width: 200
   preview_height: 150
 
+detection:
+  scale_factor: 1.05
+  min_neighbors: 4
+  min_face_ratio: 0.08
+  use_clahe: true
+
+diagnostics:
+  debug: false                 # also enabled by env PI_FACE_GREETER_DEBUG=1
+  snapshot_dir: data/debug
+  snapshot_interval_seconds: 2.0
+
 validation:
   pir_wait_seconds: 30
 

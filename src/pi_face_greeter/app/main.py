@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import sys
 
 from kivy.app import App
@@ -15,6 +16,13 @@ from pi_face_greeter.logger import setup_logging
 logger = logging.getLogger("pi_face_greeter.app")
 
 
+def _debug_enabled(diagnostics_cfg: dict) -> bool:
+    env_value = os.environ.get("PI_FACE_GREETER_DEBUG", "").strip().lower()
+    if env_value in ("1", "true", "yes"):
+        return True
+    return bool(diagnostics_cfg.get("debug", False))
+
+
 class PiFaceGreeterApp(App):
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
@@ -24,10 +32,30 @@ class PiFaceGreeterApp(App):
     def build(self):
         self.config_data = load_config()
         logging_cfg = self.config_data.get("logging", {})
+        diagnostics_cfg = dict(self.config_data.get("diagnostics", {}))
+        debug = _debug_enabled(diagnostics_cfg)
+        diagnostics_cfg["debug"] = debug
+
+        log_level = "DEBUG" if debug else logging_cfg.get("level", "INFO")
+        log_file = logging_cfg.get("file")
+        capture_loggers = ["kivy"] if debug else None
         setup_logging(
-            level=logging_cfg.get("level", "INFO"),
-            log_file=logging_cfg.get("file"),
+            level=log_level,
+            log_file=log_file,
+            capture_loggers=capture_loggers,
         )
+
+        if log_file:
+            log_path_msg = f"Logs: {log_file}"
+            print(log_path_msg)
+            logger.info(log_path_msg)
+
+        if debug:
+            snapshot_dir = diagnostics_cfg.get("snapshot_dir", "data/debug")
+            snapshot_msg = f"Debug snapshots: {snapshot_dir}"
+            print(snapshot_msg)
+            logger.info(snapshot_msg)
+            logger.debug("Diagnostics debug mode enabled")
 
         ui_cfg = self.config_data.get("ui", {})
         camera_cfg = self.config_data.get("camera", {})
@@ -38,7 +66,11 @@ class PiFaceGreeterApp(App):
 
             Window.fullscreen = "auto"
 
-        self.camera_source = CameraSource(camera_cfg)
+        self.camera_source = CameraSource(
+            camera_cfg,
+            detection_cfg=self.config_data.get("detection", {}),
+            diagnostics_cfg=diagnostics_cfg,
+        )
         self.camera_source.start()
 
         carousel = Carousel(

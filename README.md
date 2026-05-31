@@ -328,6 +328,23 @@ On Mac for UI development, set `camera.backend: opencv` in `config/config.yaml` 
 
 UI settings in `config/config.yaml` under `ui:` (`fullscreen`, blink intervals, greet cooldown, preview size).
 
+### Debugging / sharing logs
+
+When face detection is not working, enable diagnostics to capture detailed logs and annotated camera snapshots:
+
+```bash
+PI_FACE_GREETER_DEBUG=1 pi-face-greeter-app
+```
+
+Or set `diagnostics.debug: true` in `config/config.yaml`.
+
+On startup the app prints the absolute paths for:
+
+- **Log file:** `data/logs/greeter.log` (frame stats, cascade path, detection params, face counts)
+- **Debug snapshots:** `data/debug/` (JPEG every 2s with yellow boxes drawn on detected faces)
+
+Share `data/logs/greeter.log` and the latest images from `data/debug/` to diagnose detection issues. Adjust snapshot frequency via `diagnostics.snapshot_interval_seconds`.
+
 ---
 
 ## Step 1 Validation (Camera + TTS)
