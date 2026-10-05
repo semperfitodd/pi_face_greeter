@@ -63,7 +63,7 @@ def test_run_validate_motion_success(tmp_path: Path) -> None:
         patch("pi_face_greeter.validate_motion.PIRSensor", return_value=mock_pir),
         patch(
             "pi_face_greeter.validate_motion.run_greet_cycle",
-            return_value=(None, frame_path),
+            return_value=(None, frame_path, True),
         ),
         patch("pi_face_greeter.validate_motion.report_success") as mock_success,
     ):

@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 import numpy as np
 import pytest
 
-from pi_face_greeter.app.recognizer import FaceRecognizer, encode_face
+from pi_face_greeter.recognizer import FaceRecognizer, encode_face
 
 
 @pytest.fixture
@@ -32,7 +32,7 @@ def fake_face_recognition(monkeypatch):
 
 def test_encode_face_returns_none_without_face(monkeypatch) -> None:
     monkeypatch.setattr(
-        "pi_face_greeter.app.recognizer.detect_faces",
+        "pi_face_greeter.recognizer.detect_faces",
         lambda _frame, _cfg=None: [],
     )
     frame = np.zeros((100, 100, 3), dtype=np.uint8)
@@ -41,7 +41,7 @@ def test_encode_face_returns_none_without_face(monkeypatch) -> None:
 
 def test_encode_face_uses_largest_box(fake_face_recognition, monkeypatch) -> None:
     monkeypatch.setattr(
-        "pi_face_greeter.app.recognizer.detect_faces",
+        "pi_face_greeter.recognizer.detect_faces",
         lambda _frame, _cfg=None: [(10, 10, 20, 20), (0, 0, 50, 50)],
     )
     frame = np.zeros((100, 100, 3), dtype=np.uint8)
@@ -58,7 +58,7 @@ def test_identify_empty_database() -> None:
 
 def test_identify_returns_best_match(fake_face_recognition, monkeypatch) -> None:
     monkeypatch.setattr(
-        "pi_face_greeter.app.recognizer.encode_face",
+        "pi_face_greeter.recognizer.encode_face",
         lambda _frame, _box=None: np.ones(128, dtype=np.float64),
     )
 
@@ -77,7 +77,7 @@ def test_identify_returns_best_match(fake_face_recognition, monkeypatch) -> None
 
 def test_identify_respects_tolerance(fake_face_recognition, monkeypatch) -> None:
     monkeypatch.setattr(
-        "pi_face_greeter.app.recognizer.encode_face",
+        "pi_face_greeter.recognizer.encode_face",
         lambda _frame, _box=None: np.zeros(128, dtype=np.float64),
     )
 
@@ -90,7 +90,7 @@ def test_identify_respects_tolerance(fake_face_recognition, monkeypatch) -> None
 
 
 def test_load_reads_encodings(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setattr("pi_face_greeter.app.recognizer.PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr("pi_face_greeter.recognizer.PROJECT_ROOT", tmp_path)
 
     face_dir = tmp_path / "data" / "known_faces" / "todd"
     face_dir.mkdir(parents=True)
@@ -114,7 +114,7 @@ def test_load_reads_encodings(tmp_path: Path, monkeypatch) -> None:
 
 
 def test_face_recognition_module_reload(monkeypatch) -> None:
-    import pi_face_greeter.face_recognition as fr
+    import pi_face_greeter.recognition as fr
 
     recognizer = MagicMock()
     monkeypatch.setattr(fr, "_recognizer", recognizer)
@@ -129,7 +129,7 @@ def test_face_recognition_module_reload(monkeypatch) -> None:
 
 
 def test_identify_auto_configures(monkeypatch) -> None:
-    import pi_face_greeter.face_recognition as fr
+    import pi_face_greeter.recognition as fr
 
     mock_recognizer = MagicMock()
     mock_recognizer.identify.return_value = ("Todd", 0.9)

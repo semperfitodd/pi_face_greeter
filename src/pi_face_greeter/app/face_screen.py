@@ -11,13 +11,12 @@ from kivy.uix.screenmanager import Screen
 
 from pi_face_greeter.app.camera_preview import CameraPreview
 from pi_face_greeter.app.camera_source import CameraSource
-from pi_face_greeter.app.conversation import generate_greeting
 from pi_face_greeter.app.face_widget import AnimatedFace
-from pi_face_greeter.app.greeting import build_greeting
-from pi_face_greeter.app.identity_vote import PENDING, IdentityVoter
-from pi_face_greeter.app.per_person_cooldown import PerPersonCooldown, cooldown_key
-from pi_face_greeter.app.presence import should_trigger_greeting
-from pi_face_greeter.face_recognition import get_person_cooldown, get_person_greeting, identify
+from pi_face_greeter.greet_pipeline import resolve_greeting_text
+from pi_face_greeter.identity_vote import PENDING, IdentityVoter
+from pi_face_greeter.per_person_cooldown import PerPersonCooldown, cooldown_key
+from pi_face_greeter.presence import should_trigger_greeting
+from pi_face_greeter.recognition import get_person_cooldown, get_person_greeting, identify
 from pi_face_greeter.tts import speak_from_config
 
 logger = logging.getLogger("pi_face_greeter.face_screen")
@@ -48,7 +47,6 @@ class FaceScreen(Screen):
         self._status_label: Label | None = None
         self._animated_face: AnimatedFace | None = None
         self._tick_event = None
-        self._ask_how_are_you = bool(tts_cfg.get("ask_how_are_you", True))
 
         self._build_ui()
         Clock.schedule_once(self._start_presence_watch, 0)
@@ -193,15 +191,11 @@ class FaceScreen(Screen):
 
     def _speak_and_finish(self, name: str | None, custom_greeting: str | None) -> None:
         try:
-            fallback = build_greeting(
+            greeting = resolve_greeting_text(
                 name,
-                custom_greeting,
-                ask_how_are_you=self._ask_how_are_you,
-            )
-            greeting = generate_greeting(
-                name,
+                tts_cfg=self.tts_cfg,
                 ollama_cfg=self._ollama_cfg,
-                fallback_text=fallback,
+                custom_greeting=custom_greeting,
             )
             logger.info("Speaking greeting: %s", greeting)
             Clock.schedule_once(lambda _dt: self._on_greeting_ready(greeting), 0)

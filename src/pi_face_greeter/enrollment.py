@@ -7,10 +7,10 @@ from typing import Any
 
 import numpy as np
 
-from pi_face_greeter.app import people_store
-from pi_face_greeter.app.detector import detect_faces
-from pi_face_greeter.app.people_store import slugify_name
-from pi_face_greeter.app.recognizer import ENCODINGS_FILENAME, encode_face
+from pi_face_greeter import people_store
+from pi_face_greeter.detector import detect_faces
+from pi_face_greeter.people_store import slugify_name
+from pi_face_greeter.recognizer import ENCODINGS_FILENAME, encode_face
 from pi_face_greeter.camera import create_camera
 from pi_face_greeter.config_loader import PROJECT_ROOT
 

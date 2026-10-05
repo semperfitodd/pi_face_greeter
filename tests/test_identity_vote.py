@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pi_face_greeter.app.identity_vote import PENDING, IdentityVoter
+from pi_face_greeter.identity_vote import PENDING, IdentityVoter
 
 
 def test_identity_voter_confirms_after_required_streak() -> None:

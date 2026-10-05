@@ -1,9 +1,9 @@
 app:
   name: Pi Face Greeter
-  cooldown_seconds: 30
 
 ui:
   fullscreen: true
+  settings_pin: null
   blink_interval_min: 2.0
   blink_interval_max: 6.0
   greet_cooldown_seconds: 30
@@ -22,6 +22,7 @@ diagnostics:
   debug: false                 # also enabled by env PI_FACE_GREETER_DEBUG=1
   snapshot_dir: data/debug
   snapshot_interval_seconds: 2.0
+  max_retained_snapshots: 50
 
 recognition:
   tolerance: 0.6
@@ -43,6 +44,7 @@ camera:
   enabled: true
   backend: picamera2          # picamera2 | opencv (usb only)
   capture_dir: data/captured
+  max_retained_captures: 50
   width: 640
   height: 480
   warmup_frames: 2
@@ -59,7 +61,7 @@ tts:
   placeholder_greeting: "Hello. Face recognition is not enabled yet."
 
 ollama:
-  enabled: true
+  enabled: false
   base_url: http://localhost:11434
   model: llama3.2:1b
   timeout_seconds: 30          # cold model load on Pi can exceed 8s

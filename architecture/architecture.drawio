@@ -77,13 +77,13 @@
         <mxCell id="mod_pir" value="pir_sensor.py&#xa;gpiozero GPIO17" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;dashed=1;" vertex="1" parent="pkg_group">
           <mxGeometry x="310" y="110" width="130" height="50" as="geometry" />
         </mxCell>
-        <mxCell id="mod_face" value="face_recognition.py&#xa;(stub)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#999999;dashed=1;" vertex="1" parent="pkg_group">
+        <mxCell id="mod_face" value="recognition.py&#xa;greet_pipeline.py" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="pkg_group">
           <mxGeometry x="20" y="175" width="130" height="40" as="geometry" />
         </mxCell>
         <mxCell id="mod_cooldown" value="cooldown.py" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;dashed=1;" vertex="1" parent="pkg_group">
           <mxGeometry x="170" y="175" width="120" height="40" as="geometry" />
         </mxCell>
-        <mxCell id="mod_conversation" value="app/conversation.py" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="pkg_group">
+        <mxCell id="mod_conversation" value="conversation.py" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="pkg_group">
           <mxGeometry x="310" y="175" width="130" height="40" as="geometry" />
         </mxCell>
         <mxCell id="mod_ollama" value="ollama_client.py" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="pkg_group">

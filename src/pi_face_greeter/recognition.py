@@ -6,11 +6,11 @@ from typing import Any
 
 import numpy as np
 
-from pi_face_greeter.app.people_store import list_people
-from pi_face_greeter.app.recognizer import FaceRecognizer
 from pi_face_greeter.config_loader import PROJECT_ROOT, load_config
+from pi_face_greeter.people_store import list_people
+from pi_face_greeter.recognizer import FaceRecognizer
 
-logger = logging.getLogger("pi_face_greeter.face_recognition")
+logger = logging.getLogger("pi_face_greeter.recognition")
 
 _recognizer: FaceRecognizer | None = None
 

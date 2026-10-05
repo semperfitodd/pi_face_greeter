@@ -1,8 +1,6 @@
  # Pi Face Greeter
 
-A Raspberry Pi 5 face recognition greeter. A PIR motion sensor wakes the system, the camera captures frames, and a personalized spoken greeting plays through a USB speaker. A touchscreen display will show status and admin info in a future release.
-
-**Version 1 goal:** Validate all hardware — PIR, Camera Module 3, USB audio, and the motion-triggered main loop with a placeholder greeting.
+A Raspberry Pi 5 face recognition greeter for a door or entryway. The **kiosk app** on the DSI touchscreen is the primary experience: live camera preview, face recognition, natural speech, and a settings screen to enroll people. An optional PIR motion loop (`pi-face-greeter`) runs headless when you do not use the display.
 
 ---
 
@@ -33,11 +31,11 @@ A Raspberry Pi 5 face recognition greeter. A PIR motion sensor wakes the system,
 
 Pi Face Greeter sits by your door and:
 
-1. Waits for motion (PIR sensor)
-2. Wakes the camera and captures frames
-3. Identifies known faces with `face_recognition` (dlib)
-4. Plays a personalized greeting through speakers
-5. Shows status on a touchscreen *(future)*
+1. Detects a face at the camera (kiosk) or motion from the PIR (optional)
+2. Captures frames and identifies known faces with `face_recognition` (dlib)
+3. Builds a greeting (canned phrases or optional local Ollama)
+4. Speaks through Piper TTS (USB speaker)
+5. Shows status on the Hosyond 5" DSI touchscreen
 
 **Milestone order:**
 
@@ -73,12 +71,13 @@ drawio -x -f png -o architecture/architecture.png architecture/architecture.draw
 | Main loop | `src/pi_face_greeter/main.py` | Motion → capture → TTS → cooldown (PIR, optional) |
 | Step 1 validator | `src/pi_face_greeter/validate_step1.py` | Camera + TTS |
 | Step 2 enrollment | `src/pi_face_greeter/enroll.py` | Capture known-face photos + embeddings (CLI) |
-| Recognition | `src/pi_face_greeter/app/recognizer.py` | Load encodings, identify faces |
+| Recognition | `src/pi_face_greeter/recognition.py`, `recognizer.py` | Load encodings, identify faces |
+| Greeting pipeline | `src/pi_face_greeter/greet_pipeline.py` | Shared greet text + TTS for kiosk and PIR |
 | Motion validator | `src/pi_face_greeter/validate_motion.py` | PIR + one greet (final step) |
 | PIR | `src/pi_face_greeter/pir_sensor.py` | gpiozero wrapper for AM312 |
 | Camera | `src/pi_face_greeter/camera.py` | Picamera2 (CSI) backend |
 | TTS | `src/pi_face_greeter/tts.py` | Piper neural TTS (espeak-ng fallback) |
-| Conversation | `src/pi_face_greeter/app/conversation.py` | Ollama SLM greetings (fallback to canned phrases) |
+| Conversation | `src/pi_face_greeter/conversation.py` | Ollama SLM greetings (fallback to canned phrases) |
 | Ollama client | `src/pi_face_greeter/ollama_client.py` | HTTP client for local Ollama |
 | Config | `config/config.yaml` | Runtime settings |
 
@@ -94,7 +93,7 @@ See [docs/wiring.md](docs/wiring.md) for physical connections and [docs/roadmap.
 
 | Component | Notes |
 |-----------|-------|
-| Raspberry Pi 5 | 64-bit Raspberry Pi OS Bookworm |
+| Raspberry Pi 5 | 64-bit Raspberry Pi OS Trixie (Bookworm still supported) |
 | Official 27W USB-C power supply | Required for stable camera + CPU load |
 | Active cooler | Recommended for sustained use |
 | Raspberry Pi Camera Module 3 | CSI ribbon cable |
@@ -112,7 +111,7 @@ Follow this order on the bench before installing software.
 ### Step 1: Pi 5 base system
 
 1. Attach the active cooler to the Pi 5.
-2. Insert a microSD card flashed with **Raspberry Pi OS (64-bit) Bookworm**.
+2. Insert a microSD card flashed with **Raspberry Pi OS (64-bit) Trixie** (or Bookworm).
 3. Connect HDMI (or DSI display later), keyboard, and the **27W USB-C power supply**.
 4. Boot and complete initial setup (user, Wi‑Fi, updates).
 5. Verify architecture:
@@ -171,7 +170,7 @@ Full diagrams: [docs/wiring.md](docs/wiring.md)
 
 ## Raspberry Pi OS Setup
 
-1. Flash **Raspberry Pi OS (64-bit) Bookworm** using [Raspberry Pi Imager](https://www.raspberrypi.com/software/).
+1. Flash **Raspberry Pi OS (64-bit) Trixie** using [Raspberry Pi Imager](https://www.raspberrypi.com/software/). Bookworm still works; recreate the project venv after upgrading the OS (do not copy a Bookworm `.venv` onto Trixie).
 2. Enable SSH and set hostname/user in Imager if headless.
 3. Boot the Pi and update:
 
@@ -339,7 +338,8 @@ UI settings in `config/config.yaml` under `ui:`:
 
 - `presence_frames_required` — consecutive face-detection frames before starting recognition
 - `recognition_frames_required` — same identity must confirm over N frames before greeting (reduces misfires)
-- `greet_cooldown_seconds` — default per-person cooldown between greetings
+- `greet_cooldown_seconds` — default per-person cooldown between greetings (kiosk and optional PIR loop)
+- `settings_pin` — optional PIN required to add, rename, or delete faces on the settings screen (empty = unlocked; set on the Pi in `config/config.yaml`)
 
 Optional per-person overrides in `config/people.yaml`:
 
@@ -368,7 +368,7 @@ Use `tts.engine: espeak` to force the old robotic voice. Toggle `tts.ask_how_are
 
 ### Local conversation (Ollama SLM)
 
-When enabled, the greeter asks a local **Ollama** small language model for a short, context-aware spoken greeting (name + time of day) instead of the canned phrases. Output is still spoken through Piper TTS. If Ollama is disabled or unreachable, behavior falls back to `build_greeting` automatically.
+When enabled (`ollama.enabled: true`), the greeter asks a local **Ollama** small language model for a short, context-aware spoken greeting (name + time of day) instead of the canned phrases. Output is still spoken through Piper TTS. Shipped config keeps Ollama **off** until you opt in. If Ollama is disabled or unreachable, behavior falls back to canned greetings automatically. `ollama.base_url` must be `http://localhost` or `http://127.0.0.1`.
 
 One-time setup (included in `./scripts/setup_system.sh` and `./scripts/setup_venv.sh`):
 
@@ -501,7 +501,7 @@ pi-face-greeter
 
 ## Python Setup
 
-Legacy note: `pip install -r requirements.txt` still works for runtime deps only. Prefer `pip install -e ".[dev]"` on Mac or `pip install -e .` on Pi.
+Install from [pyproject.toml](pyproject.toml): `pip install -e ".[dev]"` on Mac or `pip install -e ".[recognition,voice]"` on the Pi.
 
 **Pi venv must use `--system-site-packages`** so Picamera2, gpiozero, and OpenCV from apt are available.
 
@@ -566,7 +566,13 @@ pi-face-greeter-test-pir
 
 ## Run the Main App
 
-Requires `pir.enabled: true` in config.
+**Primary (DSI kiosk):**
+
+```bash
+pi-face-greeter-app
+```
+
+**Optional PIR loop** (requires `pir.enabled: true`):
 
 ```bash
 pi-face-greeter
@@ -574,17 +580,16 @@ pi-face-greeter
 
 Configuration: `config/config.yaml`. Logs: `data/logs/greeter.log`.
 
-### systemd (future — do not enable until tested)
+### systemd user service (kiosk — test on hardware first)
 
-A service template is in `systemd/pi-face-greeter.service`. After hardware validation:
+Template: [systemd/pi-face-greeter.service](systemd/pi-face-greeter.service). Edit `USER`, paths, and `ExecStart` (`pi-face-greeter-app`), then install as a **user** unit so Kivy can use the graphical session:
 
 ```bash
-# Edit paths in the service file first, then:
-sudo cp systemd/pi-face-greeter.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable pi-face-greeter
-sudo systemctl start pi-face-greeter
-sudo systemctl status pi-face-greeter
+mkdir -p ~/.config/systemd/user
+cp systemd/pi-face-greeter.service ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable pi-face-greeter
+systemctl --user start pi-face-greeter
 ```
 
 ---
@@ -603,8 +608,10 @@ pi_face_greeter/
 │   ├── config.yaml
 │   └── people.yaml
 ├── src/pi_face_greeter/
-│   ├── app/                 # Kivy kiosk UI
-│   ├── main.py
+│   ├── app/                 # Kivy UI only (screens, camera source)
+│   ├── recognition.py       # Recognition facade
+│   ├── greet_pipeline.py    # Shared greeting + TTS
+│   ├── main.py              # Optional PIR loop
 │   ├── validate_step1.py
 │   ├── greet_once.py
 │   ├── cli.py
@@ -685,10 +692,9 @@ sudo usermod -aG video $USER
 
 See [docs/roadmap.md](docs/roadmap.md) for the full roadmap:
 
-1. FastAPI admin portal
-2. Ollama SLM — light local conversation
-3. systemd auto-start
-4. PIR motion loop (optional)
+1. systemd auto-start for kiosk (user service)
+2. Privacy mode / mute button
+3. PIR motion loop validation on hardware
 
 ---
 
@@ -707,8 +713,7 @@ See [docs/roadmap.md](docs/roadmap.md) for the full roadmap:
 - [x] Enrollment photo capture from settings UI
 - [x] Piper TTS for natural voice (espeak fallback)
 - [x] Ollama SLM for light local conversation (opt-in; see [docs/roadmap.md](docs/roadmap.md))
-- [ ] Add local FastAPI admin portal
-- [ ] Add systemd service for boot startup
+- [ ] Add systemd user service for kiosk boot startup
 - [ ] Add privacy mode / mute button
 - [ ] Add optional logging to SQLite
 - [ ] Add optional AWS sync later

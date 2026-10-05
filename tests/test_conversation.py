@@ -3,10 +3,14 @@ from __future__ import annotations
 from datetime import datetime
 from unittest.mock import patch
 
-from pi_face_greeter.app.conversation import (
+import pytest
+
+from pi_face_greeter.conversation import (
+    OllamaConfigError,
     _build_prompt,
     _sanitize,
     generate_greeting,
+    validate_ollama_base_url,
 )
 
 
@@ -64,7 +68,7 @@ def test_build_prompt_unknown_visitor() -> None:
 
 
 def test_warmup_ollama_skips_when_disabled() -> None:
-    from pi_face_greeter.app.conversation import warmup_ollama
+    from pi_face_greeter.conversation import warmup_ollama
 
     with patch("pi_face_greeter.ollama_client.warmup") as mock_warmup:
         warmup_ollama({"enabled": False})
@@ -72,7 +76,7 @@ def test_warmup_ollama_skips_when_disabled() -> None:
 
 
 def test_warmup_ollama_loads_model_when_enabled() -> None:
-    from pi_face_greeter.app.conversation import warmup_ollama
+    from pi_face_greeter.conversation import warmup_ollama
 
     with patch("pi_face_greeter.ollama_client.warmup") as mock_warmup:
         warmup_ollama({"enabled": True, "model": "llama3.2:1b"})
@@ -82,3 +86,13 @@ def test_warmup_ollama_loads_model_when_enabled() -> None:
 def test_sanitize_strips_quotes_and_limits_sentences() -> None:
     text = '"Hello there. How are you? Nice to see you again."'
     assert _sanitize(text) == "Hello there. How are you?"
+
+
+def test_validate_ollama_base_url_accepts_localhost() -> None:
+    assert validate_ollama_base_url("http://localhost:11434") == "http://localhost:11434"
+    assert validate_ollama_base_url("http://127.0.0.1") == "http://127.0.0.1:11434"
+
+
+def test_validate_ollama_base_url_rejects_remote() -> None:
+    with pytest.raises(OllamaConfigError):
+        validate_ollama_base_url("http://192.168.1.50:11434")

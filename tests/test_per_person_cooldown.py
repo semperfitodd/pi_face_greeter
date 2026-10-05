@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pi_face_greeter.app.per_person_cooldown import (
+from pi_face_greeter.per_person_cooldown import (
     UNKNOWN_COOLDOWN_KEY,
     PerPersonCooldown,
     cooldown_key,

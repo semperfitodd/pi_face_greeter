@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -13,7 +14,20 @@ from pi_face_greeter.config_loader import PROJECT_ROOT
 
 logger = logging.getLogger("pi_face_greeter.tts")
 
+_ALSA_DEVICE_PATTERN = re.compile(r"^(default|plughw:\d+,\d+|hw:\d+,\d+)$")
+
 _voice_cache: dict[str, Any] = {}
+
+
+def normalize_alsa_device(device: str | None) -> str | None:
+    if device is None:
+        return None
+    token = str(device).strip()
+    if not token:
+        return None
+    if not _ALSA_DEVICE_PATTERN.match(token):
+        raise ValueError(f"Invalid ALSA device: {device!r}")
+    return token
 
 
 def speak(text: str, voice: str = "en", alsa_device: str | None = None) -> None:
@@ -24,6 +38,7 @@ def speak(text: str, voice: str = "en", alsa_device: str | None = None) -> None:
     if shutil.which("espeak-ng") is None:
         raise RuntimeError("espeak-ng not found. Install with: sudo apt install espeak-ng")
 
+    alsa_device = normalize_alsa_device(alsa_device)
     command = ["espeak-ng", "-v", voice, text]
     env = None
     if alsa_device:
@@ -54,6 +69,7 @@ def speak_piper(
     if shutil.which("aplay") is None:
         raise RuntimeError("aplay not found. Install with: sudo apt install alsa-utils")
 
+    alsa_device = normalize_alsa_device(alsa_device)
     try:
         from piper import PiperVoice, SynthesisConfig
     except ImportError as exc:
@@ -99,7 +115,7 @@ def speak_from_config(text: str, tts_cfg: dict[str, Any]) -> None:
         return
 
     engine = tts_cfg.get("engine", "espeak")
-    alsa_device = tts_cfg.get("alsa_device")
+    alsa_device = normalize_alsa_device(tts_cfg.get("alsa_device"))
     espeak_voice = tts_cfg.get("voice", "en")
 
     if engine == "piper":

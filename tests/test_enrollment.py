@@ -28,11 +28,11 @@ def test_slugify_name_rejects_empty() -> None:
 
 def test_register_person_adds_entry(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr("pi_face_greeter.enrollment.PROJECT_ROOT", tmp_path)
-    monkeypatch.setattr("pi_face_greeter.app.people_store.PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr("pi_face_greeter.people_store.PROJECT_ROOT", tmp_path)
     people_file = tmp_path / "config" / "people.yaml"
     people_file.parent.mkdir(parents=True)
     people_file.write_text("people: []\n", encoding="utf-8")
-    monkeypatch.setattr("pi_face_greeter.app.people_store.DEFAULT_PEOPLE_PATH", people_file)
+    monkeypatch.setattr("pi_face_greeter.people_store.DEFAULT_PEOPLE_PATH", people_file)
 
     face_dir = tmp_path / "data" / "known_faces" / "todd"
     face_dir.mkdir(parents=True)
@@ -47,11 +47,11 @@ def test_register_person_adds_entry(tmp_path: Path, monkeypatch) -> None:
 
 def test_enroll_person_saves_photos(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr("pi_face_greeter.enrollment.PROJECT_ROOT", tmp_path)
-    monkeypatch.setattr("pi_face_greeter.app.people_store.PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr("pi_face_greeter.people_store.PROJECT_ROOT", tmp_path)
     people_file = tmp_path / "config" / "people.yaml"
     people_file.parent.mkdir(parents=True)
     people_file.write_text("people: []\n", encoding="utf-8")
-    monkeypatch.setattr("pi_face_greeter.app.people_store.DEFAULT_PEOPLE_PATH", people_file)
+    monkeypatch.setattr("pi_face_greeter.people_store.DEFAULT_PEOPLE_PATH", people_file)
 
     frame = np.zeros((480, 640, 3), dtype=np.uint8)
     mock_camera = MagicMock()
@@ -83,11 +83,11 @@ def test_enroll_person_saves_photos(tmp_path: Path, monkeypatch) -> None:
 
 def test_enroll_from_frames_saves_photos_and_encodings(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr("pi_face_greeter.enrollment.PROJECT_ROOT", tmp_path)
-    monkeypatch.setattr("pi_face_greeter.app.people_store.PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr("pi_face_greeter.people_store.PROJECT_ROOT", tmp_path)
     people_file = tmp_path / "config" / "people.yaml"
     people_file.parent.mkdir(parents=True)
     people_file.write_text("people: []\n", encoding="utf-8")
-    monkeypatch.setattr("pi_face_greeter.app.people_store.DEFAULT_PEOPLE_PATH", people_file)
+    monkeypatch.setattr("pi_face_greeter.people_store.DEFAULT_PEOPLE_PATH", people_file)
 
     frame = np.zeros((480, 640, 3), dtype=np.uint8)
     enrollment_cfg = {
@@ -118,11 +118,11 @@ def test_enroll_from_frames_saves_photos_and_encodings(tmp_path: Path, monkeypat
 
 def test_enroll_person_count_override(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr("pi_face_greeter.enrollment.PROJECT_ROOT", tmp_path)
-    monkeypatch.setattr("pi_face_greeter.app.people_store.PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr("pi_face_greeter.people_store.PROJECT_ROOT", tmp_path)
     people_file = tmp_path / "config" / "people.yaml"
     people_file.parent.mkdir(parents=True)
     people_file.write_text("people: []\n", encoding="utf-8")
-    monkeypatch.setattr("pi_face_greeter.app.people_store.DEFAULT_PEOPLE_PATH", people_file)
+    monkeypatch.setattr("pi_face_greeter.people_store.DEFAULT_PEOPLE_PATH", people_file)
 
     frame = np.zeros((480, 640, 3), dtype=np.uint8)
     mock_camera = MagicMock()

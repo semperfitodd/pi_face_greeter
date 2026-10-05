@@ -5,9 +5,33 @@ import re
 from datetime import datetime
 from typing import Any
 
+from urllib.parse import urlparse
+
 from pi_face_greeter import ollama_client
 
 logger = logging.getLogger("pi_face_greeter.conversation")
+
+ALLOWED_OLLAMA_HOSTS = frozenset({"127.0.0.1", "localhost"})
+
+
+class OllamaConfigError(ValueError):
+    pass
+
+
+def validate_ollama_base_url(base_url: str) -> str:
+    parsed = urlparse(base_url.strip())
+    if parsed.scheme != "http":
+        raise OllamaConfigError("Ollama base_url must use http")
+    if parsed.hostname not in ALLOWED_OLLAMA_HOSTS:
+        raise OllamaConfigError("Ollama base_url must point to localhost")
+    if parsed.username or parsed.password:
+        raise OllamaConfigError("Ollama base_url must not include credentials")
+    if parsed.path not in ("", "/"):
+        raise OllamaConfigError("Ollama base_url must not include a path")
+    port = parsed.port if parsed.port is not None else 11434
+    host = parsed.hostname
+    assert host is not None
+    return f"http://{host}:{port}"
 
 MAX_GREETING_CHARS = 280
 
@@ -58,8 +82,9 @@ def _sanitize(text: str) -> str:
 
 def _ollama_settings(ollama_cfg: dict[str, Any]) -> dict[str, Any]:
     warmup_timeout = float(ollama_cfg.get("warmup_timeout_seconds", 60))
+    raw_url = str(ollama_cfg.get("base_url", "http://localhost:11434"))
     return {
-        "base_url": str(ollama_cfg.get("base_url", "http://localhost:11434")),
+        "base_url": validate_ollama_base_url(raw_url),
         "model": str(ollama_cfg.get("model", "llama3.2:1b")),
         "timeout": float(ollama_cfg.get("timeout_seconds", 30)),
         "warmup_timeout": warmup_timeout,

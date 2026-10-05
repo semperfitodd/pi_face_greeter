@@ -1,26 +1,26 @@
 [Unit]
-Description=Pi Face Greeter
-After=network.target sound.target
-Wants=network.target
+Description=Pi Face Greeter kiosk app
+After=graphical-session.target sound.target
+Wants=graphical-session.target
 
 [Service]
 Type=simple
-User=pi
-Group=pi
-WorkingDirectory=/home/pi/pi_face_greeter
+WorkingDirectory=/home/USER/pi_face_greeter
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/home/pi/pi_face_greeter/.venv/bin/pi-face-greeter
+Environment=DISPLAY=:0
+ExecStart=/home/USER/pi_face_greeter/.venv/bin/pi-face-greeter-app
 Restart=on-failure
 RestartSec=5
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target
 
-# Install (after hardware validation — do not enable until tested):
-#   sudo cp systemd/pi-face-greeter.service /etc/systemd/system/
-#   sudo systemctl daemon-reload
-#   sudo systemctl enable pi-face-greeter
-#   sudo systemctl start pi-face-greeter
-#   sudo systemctl status pi-face-greeter
+# User service (recommended for Kivy on the DSI display):
+#   Edit USER, WorkingDirectory, and ExecStart above, then:
+#   mkdir -p ~/.config/systemd/user
+#   cp systemd/pi-face-greeter.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload
+#   systemctl --user enable pi-face-greeter
+#   systemctl --user start pi-face-greeter
 #
-# Update User, WorkingDirectory, and ExecStart paths to match your setup.
+# Optional PIR loop (headless): use pi-face-greeter instead of pi-face-greeter-app.

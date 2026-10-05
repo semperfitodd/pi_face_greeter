@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import logging
 import re
+import shutil
 from pathlib import Path
 from typing import Any
 
 import yaml
 
 from pi_face_greeter.config_loader import PROJECT_ROOT
+from pi_face_greeter.path_security import PathSecurityError, resolve_known_face_dir
 
 logger = logging.getLogger("pi_face_greeter.people_store")
 
@@ -157,10 +159,29 @@ def delete_person(name: str, path: Path | None = None) -> None:
     data = _load_data(people_path)
     people: list[dict[str, Any]] = data.setdefault("people", [])
 
-    remaining = [person for person in people if person.get("name") != name]
-    if len(remaining) == len(people):
+    target: dict[str, Any] | None = None
+    for person in people:
+        if person.get("name") == name:
+            target = person
+            break
+
+    if target is None:
         raise PersonNotFoundError(f"Person not found: {name}")
 
-    data["people"] = remaining
+    face_dir = target.get("face_dir")
+    data["people"] = [person for person in people if person.get("name") != name]
     _save_data(people_path, data)
     logger.info("Deleted person %s", name)
+
+    if not face_dir:
+        return
+
+    try:
+        person_dir = resolve_known_face_dir(PROJECT_ROOT, str(face_dir))
+    except PathSecurityError:
+        logger.warning("Did not remove face data for %s: invalid face_dir", name)
+        return
+
+    if person_dir.is_dir():
+        shutil.rmtree(person_dir)
+        logger.info("Removed face data at %s", person_dir)

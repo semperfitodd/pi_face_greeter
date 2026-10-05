@@ -10,7 +10,7 @@ from typing import Any
 import numpy as np
 
 from pi_face_greeter.app.debug_frames import save_debug_frame
-from pi_face_greeter.app.detector import FaceBox, detect_faces
+from pi_face_greeter.detector import FaceBox, detect_faces
 from pi_face_greeter.camera import CameraBackend, create_camera
 
 logger = logging.getLogger("pi_face_greeter.camera_source")
@@ -83,6 +83,10 @@ class CameraSource:
         self._last_snapshot_time = now
         try:
             save_debug_frame(frame, boxes, self._snapshot_dir)
+            from pi_face_greeter.retention import prune_jpeg_directory
+
+            max_snapshots = int(self._diagnostics_cfg.get("max_retained_snapshots", 50))
+            prune_jpeg_directory(self._snapshot_dir, max_snapshots)
         except Exception:
             logger.exception("Failed to save debug snapshot")
 

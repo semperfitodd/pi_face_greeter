@@ -9,13 +9,14 @@ from kivy.app import App
 from kivy.uix.carousel import Carousel
 
 from pi_face_greeter.app.camera_source import CameraSource
-from pi_face_greeter.app.conversation import warmup_ollama
+from pi_face_greeter.conversation import warmup_ollama
 from pi_face_greeter.app.face_screen import FaceScreen
 from pi_face_greeter.app.settings_screen import SettingsScreen
 from pi_face_greeter.config_loader import load_config
-from pi_face_greeter.face_recognition import configure as configure_recognizer
-from pi_face_greeter.face_recognition import reload as reload_recognizer
+from pi_face_greeter.recognition import configure as configure_recognizer
+from pi_face_greeter.recognition import reload as reload_recognizer
 from pi_face_greeter.logger import setup_logging
+from pi_face_greeter.settings_auth import warn_if_settings_unlocked
 
 logger = logging.getLogger("pi_face_greeter.app")
 
@@ -64,6 +65,7 @@ class PiFaceGreeterApp(App):
             logger.debug("Diagnostics debug mode enabled")
 
         ui_cfg = self.config_data.get("ui", {})
+        warn_if_settings_unlocked(ui_cfg.get("settings_pin"))
         camera_cfg = self.config_data.get("camera", {})
         tts_cfg = self.config_data.get("tts", {})
         ollama_cfg = self.config_data.get("ollama", {})
@@ -111,6 +113,7 @@ class PiFaceGreeterApp(App):
             camera_source=self.camera_source,
             enrollment_cfg=enrollment_cfg,
             detection_cfg=detection_cfg,
+            settings_pin=ui_cfg.get("settings_pin"),
             on_people_changed=reload_recognizer,
         )
         carousel.add_widget(face_screen)

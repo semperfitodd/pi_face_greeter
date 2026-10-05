@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import random
 
-from pi_face_greeter.app.greeting import HOW_ARE_YOU, build_greeting
+from pi_face_greeter.greeting import HOW_ARE_YOU, build_greeting
 
 
 class _FakeRng:

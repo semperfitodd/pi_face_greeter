@@ -104,8 +104,8 @@ def test_pir() -> int:
 
 
 def test_ollama() -> int:
-    from pi_face_greeter.app.conversation import generate_greeting
-    from pi_face_greeter.app.greeting import build_greeting
+    from pi_face_greeter.conversation import generate_greeting
+    from pi_face_greeter.greeting import build_greeting
 
     config = load_config()
     setup_logging(level=config.get("logging", {}).get("level", "INFO"))

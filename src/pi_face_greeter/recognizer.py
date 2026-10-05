@@ -6,8 +6,9 @@ from typing import Any
 
 import numpy as np
 
-from pi_face_greeter.app.detector import FaceBox, detect_faces
+from pi_face_greeter.detector import FaceBox, detect_faces
 from pi_face_greeter.config_loader import PROJECT_ROOT
+from pi_face_greeter.path_security import PathSecurityError, resolve_known_face_dir
 
 logger = logging.getLogger("pi_face_greeter.recognizer")
 
@@ -63,7 +64,12 @@ class FaceRecognizer:
                 continue
 
             self._people_by_name[name] = person
-            encodings_path = root / face_dir / ENCODINGS_FILENAME
+            try:
+                person_dir = resolve_known_face_dir(root, str(face_dir))
+            except PathSecurityError:
+                logger.warning("Skipping %s: invalid face_dir %s", name, face_dir)
+                continue
+            encodings_path = person_dir / ENCODINGS_FILENAME
             if not encodings_path.is_file():
                 logger.warning("No encodings for %s at %s", name, encodings_path)
                 continue

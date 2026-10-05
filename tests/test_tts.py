@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from pi_face_greeter.tts import speak, speak_from_config
+from pi_face_greeter.tts import normalize_alsa_device, speak, speak_from_config
 
 
 def test_speak_invokes_espeak() -> None:
@@ -27,6 +27,11 @@ def test_speak_skips_empty_text() -> None:
     with patch("pi_face_greeter.tts.subprocess.run") as mock_run:
         speak("   ")
     mock_run.assert_not_called()
+
+
+def test_normalize_alsa_device_rejects_injection() -> None:
+    with pytest.raises(ValueError, match="Invalid ALSA device"):
+        normalize_alsa_device("plughw:1,0;rm -rf /")
 
 
 def test_speak_raises_when_espeak_missing() -> None:

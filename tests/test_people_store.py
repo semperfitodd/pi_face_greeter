@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from pi_face_greeter.app.people_store import (
+from pi_face_greeter.people_store import (
     PersonAlreadyExistsError,
     PersonNotFoundError,
     add_person,
@@ -66,6 +66,20 @@ def test_delete_person(people_env) -> None:
     assert list_people(people_path) == []
 
 
+def test_delete_person_removes_face_data(people_env, tmp_path: Path, monkeypatch) -> None:
+    people_path, faces_dir = people_env
+    monkeypatch.setattr("pi_face_greeter.people_store.PROJECT_ROOT", tmp_path)
+
+    known_faces = tmp_path / "data" / "known_faces"
+    add_person("Todd", path=people_path, known_faces_dir=known_faces)
+    person_dir = known_faces / "todd"
+    (person_dir / "001.jpg").write_bytes(b"jpeg")
+
+    delete_person("Todd", path=people_path)
+    assert list_people(people_path) == []
+    assert not person_dir.exists()
+
+
 def test_delete_missing_raises(people_env) -> None:
     people_path, _faces_dir = people_env
     with pytest.raises(PersonNotFoundError):
@@ -74,7 +88,7 @@ def test_delete_missing_raises(people_env) -> None:
 
 def test_upsert_person_adds_and_updates(people_env, tmp_path: Path, monkeypatch) -> None:
     people_path, faces_dir = people_env
-    monkeypatch.setattr("pi_face_greeter.app.people_store.PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr("pi_face_greeter.people_store.PROJECT_ROOT", tmp_path)
 
     face_dir = faces_dir / "todd"
     face_dir.mkdir(parents=True)

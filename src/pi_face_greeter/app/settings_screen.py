@@ -13,7 +13,7 @@ from kivy.uix.scrollview import ScrollView
 from kivy.uix.textinput import TextInput
 
 from pi_face_greeter.app.camera_source import CameraSource
-from pi_face_greeter.app.people_store import (
+from pi_face_greeter.people_store import (
     PersonAlreadyExistsError,
     PersonNotFoundError,
     PeopleStoreError,
@@ -22,6 +22,10 @@ from pi_face_greeter.app.people_store import (
     update_person_name,
 )
 from pi_face_greeter.enrollment import enroll_from_frames
+from pi_face_greeter.settings_auth import (
+    settings_pin_configured,
+    verify_settings_pin,
+)
 
 logger = logging.getLogger("pi_face_greeter.settings_screen")
 
@@ -32,6 +36,7 @@ class SettingsScreen(Screen):
         camera_source: CameraSource | None = None,
         enrollment_cfg: dict[str, Any] | None = None,
         detection_cfg: dict[str, Any] | None = None,
+        settings_pin: str | None = None,
         on_people_changed: Callable[[], None] | None = None,
         **kwargs,
     ) -> None:
@@ -39,6 +44,8 @@ class SettingsScreen(Screen):
         self.camera_source = camera_source
         self.enrollment_cfg = enrollment_cfg or {}
         self.detection_cfg = detection_cfg or {}
+        self._settings_pin = settings_pin
+        self._settings_unlocked = not settings_pin_configured(settings_pin)
         self.on_people_changed = on_people_changed
         self._people_list = BoxLayout(orientation="vertical", spacing=8, size_hint_y=None)
         self._people_list.bind(minimum_height=self._people_list.setter("height"))
@@ -47,7 +54,55 @@ class SettingsScreen(Screen):
         self.refresh_people()
 
     def on_enter(self, *_args) -> None:
+        if not self._settings_unlocked:
+            self._prompt_settings_pin()
+            return
         self.refresh_people()
+
+    def _prompt_settings_pin(self) -> None:
+        content = BoxLayout(orientation="vertical", spacing=8, padding=8)
+        pin_input = TextInput(
+            hint_text="PIN",
+            multiline=False,
+            password=True,
+            size_hint_y=None,
+            height=40,
+        )
+        content.add_widget(pin_input)
+
+        popup = Popup(
+            title="Settings PIN",
+            content=content,
+            size_hint=(0.85, 0.35),
+            auto_dismiss=False,
+        )
+
+        actions = BoxLayout(orientation="horizontal", size_hint_y=None, height=44, spacing=8)
+
+        def _submit(_btn) -> None:
+            if verify_settings_pin(pin_input.text, self._settings_pin):
+                self._settings_unlocked = True
+                popup.dismiss()
+                self.refresh_people()
+            else:
+                self._set_status("Incorrect PIN.")
+
+        submit_button = Button(text="Unlock")
+        submit_button.bind(on_press=_submit)
+        cancel_button = Button(text="Cancel")
+        cancel_button.bind(on_press=lambda _btn: popup.dismiss())
+        actions.add_widget(submit_button)
+        actions.add_widget(cancel_button)
+        content.add_widget(actions)
+
+        popup.open()
+        Clock.schedule_once(lambda _dt: setattr(pin_input, "focus", True), 0.1)
+
+    def _ensure_settings_unlocked(self) -> bool:
+        if self._settings_unlocked:
+            return True
+        self._prompt_settings_pin()
+        return False
 
     def _build_ui(self) -> None:
         root = BoxLayout(orientation="vertical", padding=16, spacing=12)
@@ -150,6 +205,8 @@ class SettingsScreen(Screen):
             self._capture_event = None
 
     def _prompt_add_face(self) -> None:
+        if not self._ensure_settings_unlocked():
+            return
         if self.camera_source is None:
             self._set_status("Camera is not available for enrollment.")
             return
@@ -274,6 +331,8 @@ class SettingsScreen(Screen):
         self._notify_changed()
 
     def _prompt_edit_face(self, current_name: str) -> None:
+        if not self._ensure_settings_unlocked():
+            return
         content = BoxLayout(orientation="vertical", spacing=8, padding=8)
         name_input = TextInput(
             text=current_name,
@@ -326,6 +385,8 @@ class SettingsScreen(Screen):
         Clock.schedule_once(lambda _dt: setattr(name_input, "focus", True), 0.1)
 
     def _confirm_delete_face(self, name: str) -> None:
+        if not self._ensure_settings_unlocked():
+            return
         content = BoxLayout(orientation="vertical", spacing=8, padding=8)
         content.add_widget(Label(text=f"Delete {name}?"))
 

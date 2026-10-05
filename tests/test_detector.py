@@ -6,9 +6,9 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from pi_face_greeter.app import detector as detector_module
+from pi_face_greeter import detector as detector_module
 from pi_face_greeter.app.debug_frames import save_debug_frame
-from pi_face_greeter.app.detector import detect_faces, get_cascade_classifier
+from pi_face_greeter.detector import detect_faces, get_cascade_classifier
 
 
 def test_detect_faces_without_opencv(monkeypatch) -> None:

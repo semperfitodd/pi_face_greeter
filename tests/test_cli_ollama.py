@@ -20,7 +20,7 @@ def test_test_ollama_success() -> None:
         patch("pi_face_greeter.cli.setup_logging"),
         patch("pi_face_greeter.cli.health_check", return_value=True),
         patch(
-            "pi_face_greeter.app.conversation.generate_greeting",
+            "pi_face_greeter.conversation.generate_greeting",
             return_value="Good morning, Todd!",
         ),
     ):
@@ -46,11 +46,11 @@ def test_test_ollama_fallback_failure() -> None:
         patch("pi_face_greeter.cli.setup_logging"),
         patch("pi_face_greeter.cli.health_check", return_value=True),
         patch(
-            "pi_face_greeter.app.conversation.generate_greeting",
+            "pi_face_greeter.conversation.generate_greeting",
             return_value="Hey Todd, good to see you.",
         ),
         patch(
-            "pi_face_greeter.app.greeting.build_greeting",
+            "pi_face_greeter.greeting.build_greeting",
             return_value="Hey Todd, good to see you.",
         ),
     ):

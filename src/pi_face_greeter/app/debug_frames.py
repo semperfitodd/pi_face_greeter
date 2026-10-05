@@ -6,7 +6,7 @@ from pathlib import Path
 
 import numpy as np
 
-from pi_face_greeter.app.detector import FaceBox
+from pi_face_greeter.detector import FaceBox
 
 logger = logging.getLogger("pi_face_greeter.debug_frames")
 

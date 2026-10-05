@@ -5,12 +5,15 @@ globs: "**/*"
 
 # Pi Face Greeter
 
-- **Mac dev:** `pip install -e ".[dev]"` then `pytest`. No Picamera2/gpiozero hardware tests on Mac.
-- **Pi deploy:** `./scripts/setup_system.sh` then log out/in, then `./scripts/setup_venv.sh`. Venv uses `--system-site-packages`. Apt for picamera2, gpiozero, espeak-ng; Ollama for optional SLM greetings.
-- **Ollama:** opt-in (`ollama.enabled: false` by default). Greeting generation runs off the UI thread; always falls back to `build_greeting` when Ollama is unavailable.
-- **Milestone order:** Kiosk app → real recognition → real enrollment from UI → **optional** PIR/motion. CLI validators remain for hardware checks.
+- **Mac dev:** `pip install -e ".[dev]"` then `pytest` (Python >=3.11). No Picamera2/gpiozero hardware tests on Mac.
+- **Pi deploy:** `./scripts/setup_system.sh` then log out/in, then `./scripts/setup_venv.sh`. Venv uses `--system-site-packages`. Apt for picamera2, gpiozero, espeak-ng; Ollama optional for SLM greetings (bound to localhost via setup script).
+- **Primary app:** `pi-face-greeter-app` (kiosk). Optional PIR: `pi-face-greeter` when `pir.enabled: true`.
+- **Domain modules** live under `src/pi_face_greeter/` (`recognizer`, `detector`, `people_store`, `greeting`, `conversation`, `greet_pipeline`, `recognition.py`). **Kivy UI only** under `src/pi_face_greeter/app/`.
+- **Ollama:** opt-in (`ollama.enabled: false` in committed config). `base_url` must be localhost. Greeting generation runs off the UI thread; falls back to canned `build_greeting` when unavailable.
+- **Settings PIN:** optional `ui.settings_pin` in config; empty logs a warning and leaves settings unlocked.
+- **Cooldown:** `ui.greet_cooldown_seconds` (+ per-person overrides in `people.yaml`) for kiosk and PIR.
 - **Validators/enrollment:** quiet terminal output; full logs in `data/logs/greeter.log`.
 - **Config:** YAML in `config/`. No hardcoded secrets or machine-specific ALSA paths in commits.
-- **Package:** `src/pi_face_greeter/`. Console scripts in `pyproject.toml`.
+- **Package:** `pyproject.toml` is canonical (no `requirements.txt`).
 - **Architecture diagram:** `architecture/architecture.drawio`. Regenerate SVG/PNG with drawio CLI when components change.
 - Run `pytest` before push.

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pi_face_greeter.app.presence import should_trigger_greeting
+from pi_face_greeter.presence import should_trigger_greeting
 
 
 def test_should_trigger_greeting_when_ready() -> None:

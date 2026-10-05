@@ -6,16 +6,14 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from pi_face_greeter.app.conversation import generate_greeting
-from pi_face_greeter.app.greeting import build_greeting
 from pi_face_greeter.camera import CameraBackend, create_camera
 from pi_face_greeter.config_loader import load_config
-from pi_face_greeter.cooldown import CooldownGate
-from pi_face_greeter.face_recognition import configure as configure_recognizer
-from pi_face_greeter.face_recognition import get_person_greeting, identify
+from pi_face_greeter.greet_pipeline import speak_greeting
 from pi_face_greeter.logger import setup_logging
+from pi_face_greeter.per_person_cooldown import PerPersonCooldown, cooldown_key
 from pi_face_greeter.pir_sensor import PIRSensor
-from pi_face_greeter.tts import speak_from_config
+from pi_face_greeter.recognition import configure as configure_recognizer
+from pi_face_greeter.recognition import get_person_cooldown, identify
 
 logger = logging.getLogger("pi_face_greeter")
 
@@ -33,10 +31,12 @@ def run_greet_cycle(
     camera: CameraBackend | None = None,
     filename_prefix: str = "motion",
     ollama_cfg: dict[str, Any] | None = None,
-) -> tuple[CameraBackend | None, Path | None]:
+    cooldown: PerPersonCooldown | None = None,
+) -> tuple[CameraBackend | None, Path | None, bool]:
     frame_path = None
     active_camera = camera
     ollama = ollama_cfg or {}
+    spoke = False
 
     if camera_cfg.get("enabled", True):
         if active_camera is None:
@@ -46,29 +46,45 @@ def run_greet_cycle(
         filename = f"{filename_prefix}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
         frame_path = active_camera.save_frame(frame, capture_dir / filename)
 
+        from pi_face_greeter.retention import prune_jpeg_directory
+
+        max_captures = int(camera_cfg.get("max_retained_captures", 50))
+        prune_jpeg_directory(capture_dir, max_captures)
+
         name, confidence = identify(frame)
-        ask_how_are_you = bool(tts_cfg.get("ask_how_are_you", True))
         if name:
             logger.info("Recognized %s (confidence %.2f)", name, confidence)
-            fallback = build_greeting(
-                name,
-                get_person_greeting(name),
-                ask_how_are_you=ask_how_are_you,
-            )
         else:
-            fallback = build_greeting(None, ask_how_are_you=ask_how_are_you)
-        greeting = generate_greeting(name, ollama_cfg=ollama, fallback_text=fallback)
+            logger.info("No recognized face; using friend greeting")
+
+        if cooldown is not None:
+            key = cooldown_key(name)
+            person_cooldown = get_person_cooldown(name)
+            if person_cooldown is not None:
+                cooldown.set_duration(key, person_cooldown)
+            if not cooldown.can_trigger(key):
+                remaining = cooldown.seconds_remaining(key)
+                logger.info("Cooldown active for %s (%.0fs remaining), skipping greeting", key, remaining)
+                return active_camera, frame_path, False
+            cooldown.mark_triggered(key)
+
+        speak_greeting(
+            name,
+            tts_cfg=tts_cfg,
+            ollama_cfg=ollama,
+        )
+        spoke = True
     else:
         logger.info("Camera disabled in config")
-        fallback = tts_cfg.get(
-            "placeholder_greeting",
-            "Hello. Face recognition is not enabled yet.",
+        speak_greeting(
+            None,
+            tts_cfg=tts_cfg,
+            ollama_cfg=ollama,
+            camera_disabled=True,
         )
-        greeting = generate_greeting(None, ollama_cfg=ollama, fallback_text=fallback)
+        spoke = True
 
-    speak_from_config(greeting, tts_cfg)
-
-    return active_camera, frame_path
+    return active_camera, frame_path, spoke
 
 
 def main() -> int:
@@ -83,6 +99,7 @@ def main() -> int:
     configure_recognizer(config.get("recognition", {}))
 
     app_cfg = config.get("app", {})
+    ui_cfg = config.get("ui", {})
     pir_cfg = config.get("pir", {})
     camera_cfg = config.get("camera", {})
     tts_cfg = config.get("tts", {})
@@ -95,7 +112,8 @@ def main() -> int:
         )
         return 1
 
-    cooldown = CooldownGate(app_cfg.get("cooldown_seconds", 30))
+    greet_cooldown = float(ui_cfg.get("greet_cooldown_seconds", 30))
+    cooldown = PerPersonCooldown(greet_cooldown)
     pir = PIRSensor(gpio_pin=pir_cfg.get("gpio_pin", 17))
     camera: CameraBackend | None = None
 
@@ -118,28 +136,24 @@ def main() -> int:
             print(f"Motion detected at {timestamp}")
             logger.info("Motion detected at %s", timestamp)
 
-            if not cooldown.can_trigger():
-                remaining = cooldown.seconds_remaining()
-                logger.info("Cooldown active (%.0fs remaining), skipping greeting", remaining)
-                continue
-
             try:
-                camera, frame_path = run_greet_cycle(
+                camera, frame_path, spoke = run_greet_cycle(
                     camera_cfg,
                     tts_cfg,
                     camera=camera,
                     filename_prefix="motion",
                     ollama_cfg=ollama_cfg,
+                    cooldown=cooldown,
                 )
             except Exception:
                 logger.exception("Greet cycle failed")
                 continue
 
-            cooldown.mark_triggered()
-            if frame_path:
-                logger.info("Greeting complete, frame saved to %s", frame_path)
-            else:
-                logger.info("Greeting complete")
+            if spoke:
+                if frame_path:
+                    logger.info("Greeting complete, frame saved to %s", frame_path)
+                else:
+                    logger.info("Greeting complete")
 
     except Exception:
         logger.exception("Unexpected error in main loop")

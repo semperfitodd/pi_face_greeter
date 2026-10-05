@@ -17,4 +17,15 @@ sudo usermod -aG video,gpio "$USER"
 echo "Installing Ollama..."
 curl -fsSL https://ollama.com/install.sh | sh
 
+OLLAMA_ENV="/etc/systemd/system/ollama.service.d/override.conf"
+if [[ -d /etc/systemd/system ]]; then
+  sudo mkdir -p /etc/systemd/system/ollama.service.d
+  printf '%s\n' '[Service]' 'Environment=OLLAMA_HOST=127.0.0.1' | sudo tee "$OLLAMA_ENV" >/dev/null
+  sudo systemctl daemon-reload
+  if systemctl is-active --quiet ollama 2>/dev/null; then
+    sudo systemctl restart ollama
+  fi
+  echo "Configured Ollama to listen on 127.0.0.1 only ($OLLAMA_ENV)."
+fi
+
 echo "System setup complete. Log out and back in for group changes to apply."

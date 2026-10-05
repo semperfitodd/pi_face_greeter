@@ -22,6 +22,7 @@ def run_validate_motion(config: dict[str, Any]) -> int:
     validation_cfg = config.get("validation", {})
     camera_cfg = config.get("camera", {})
     tts_cfg = config.get("tts", {})
+    ollama_cfg = config.get("ollama", {})
     log_path = _log_path(config)
 
     if not pir_cfg.get("enabled", False):
@@ -51,20 +52,25 @@ def run_validate_motion(config: dict[str, Any]) -> int:
             )
             return 1
 
-        camera, frame_path = run_greet_cycle(
+        camera, frame_path, spoke = run_greet_cycle(
             camera_cfg,
             tts_cfg,
             camera=camera,
             filename_prefix="motion",
+            ollama_cfg=ollama_cfg,
         )
 
-        if frame_path:
+        if spoke and frame_path:
             report_success(
                 f"Motion validation passed. GPIO{gpio_pin}, frame: {frame_path}, greeting spoken."
             )
-        else:
+        elif spoke:
             report_success(
                 f"Motion validation passed. GPIO{gpio_pin}, greeting spoken."
+            )
+        else:
+            report_success(
+                f"Motion validation passed. GPIO{gpio_pin}, greet skipped (cooldown)."
             )
         return 0
 

@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 from pi_face_greeter.cli_output import configure_validation_logging, report_failure, report_success
 from pi_face_greeter.config_loader import load_config
 from pi_face_greeter.main import run_greet_cycle
@@ -17,12 +15,20 @@ def main() -> int:
 
     camera_cfg = config.get("camera", {})
     tts_cfg = config.get("tts", {})
+    ollama_cfg = config.get("ollama", {})
     camera = None
 
     try:
-        camera, frame_path = run_greet_cycle(
-            camera_cfg, tts_cfg, camera=camera, filename_prefix="greet"
+        camera, frame_path, spoke = run_greet_cycle(
+            camera_cfg,
+            tts_cfg,
+            camera=camera,
+            filename_prefix="greet",
+            ollama_cfg=ollama_cfg,
         )
+        if not spoke:
+            report_success("Greet once passed (cooldown skipped speech).")
+            return 0
         if frame_path:
             report_success(f"Greet once passed. Frame: {frame_path}")
         else:

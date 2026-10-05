@@ -8,7 +8,8 @@ from pi_face_greeter.main import main
 def test_main_exits_when_pir_disabled() -> None:
     config = {
         "logging": {"level": "INFO"},
-        "app": {"name": "Pi Face Greeter", "cooldown_seconds": 30},
+        "app": {"name": "Pi Face Greeter"},
+        "ui": {"greet_cooldown_seconds": 30},
         "pir": {"enabled": False, "gpio_pin": 17},
         "camera": {"enabled": True},
         "tts": {"enabled": True},
@@ -17,6 +18,7 @@ def test_main_exits_when_pir_disabled() -> None:
     with (
         patch("pi_face_greeter.main.load_config", return_value=config),
         patch("pi_face_greeter.main.setup_logging"),
+        patch("pi_face_greeter.main.configure_recognizer"),
         patch("pi_face_greeter.main.PIRSensor") as mock_pir,
     ):
         result = main()
