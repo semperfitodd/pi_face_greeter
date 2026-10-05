@@ -220,28 +220,32 @@ You should see a live preview for 5 seconds. Pi 5 exposes `cam0` and `cam1`; eit
 aplay -l
 ```
 
-Example output:
+Example output on **Pi 5 with HDMI enabled** (card numbers vary by machine):
 
 ```
-card 1: Device [USB Audio Device], device 0: USB Audio [USB Audio]
+card 0: vc4hdmi0 [vc4-hdmi-0], device 0: ...
+card 1: vc4hdmi1 [vc4-hdmi-1], device 0: ...
+card 2: Device [USB PnP Audio Device], device 0: USB Audio [USB Audio]
 ```
 
-2. Test the USB card (adjust card/device numbers):
+The greeter **automatically uses the USB playback card** when `tts.alsa_device` is `null` (default). You do not need to hardcode a card number.
+
+2. Test the USB speaker manually (use the card number from your `aplay -l` line that contains `USB`):
 
 ```bash
-speaker-test -D plughw:1,0 -c 2 -t wav
+speaker-test -D plughw:2,0 -c 2 -t wav
 ```
 
 Press Ctrl+C after confirming audio.
 
-3. Set the device in `config/config.yaml`:
+3. Optional override in `config/config.yaml` (only if auto-detection is wrong):
 
 ```yaml
 tts:
-  alsa_device: "plughw:1,0"
+  alsa_device: "plughw:2,0"
 ```
 
-Leave as `null` to use the system default if HDMI/audio jack is preferred.
+Leave as `null` for normal USB speaker use.
 
 ---
 
@@ -656,10 +660,11 @@ rpicam-hello --list-cameras
 
 ```bash
 aplay -l
-speaker-test -D plughw:1,0 -c 2 -t wav
+speaker-test -D plughw:N,0 -c 2 -t wav   # N = card number of the USB line
 ```
 
-- Set `tts.alsa_device` in `config/config.yaml`.
+- With `tts.alsa_device: null`, the app picks the USB card automatically.
+- Set `tts.alsa_device` only to override (e.g. `plughw:2,0`).
 - Confirm speaker wired to sound card header with correct polarity.
 - Check volume: `alsamixer` (select USB card with F6).
 

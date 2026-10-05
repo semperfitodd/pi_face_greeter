@@ -9,7 +9,7 @@ from pi_face_greeter.config_loader import load_config
 from pi_face_greeter.logger import setup_logging
 from pi_face_greeter.ollama_client import health_check
 from pi_face_greeter.pir_sensor import PIRSensor
-from pi_face_greeter.tts import speak
+from pi_face_greeter.tts import resolve_playback_device, speak
 
 logger = logging.getLogger("pi_face_greeter.cli")
 
@@ -53,14 +53,14 @@ def test_tts() -> int:
     setup_logging(level=config.get("logging", {}).get("level", "INFO"))
 
     tts_cfg = config.get("tts", {})
-    alsa_device = tts_cfg.get("alsa_device")
+    alsa_device = resolve_playback_device(tts_cfg.get("alsa_device"))
     voice = tts_cfg.get("voice", "en")
 
     print("TTS test using espeak-ng")
     if alsa_device:
         print(f"ALSA device: {alsa_device}")
     else:
-        print("ALSA device: default (set tts.alsa_device in config if silent)")
+        print("ALSA device: system default (no USB card found; run aplay -l)")
     print(f"Phrase: {TEST_TTS_PHRASE}\n")
 
     try:

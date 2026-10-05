@@ -15,8 +15,53 @@ from pi_face_greeter.config_loader import PROJECT_ROOT
 logger = logging.getLogger("pi_face_greeter.tts")
 
 _ALSA_DEVICE_PATTERN = re.compile(r"^(default|plughw:\d+,\d+|hw:\d+,\d+)$")
+_APLAY_CARD_LINE = re.compile(r"^card (\d+):", re.IGNORECASE)
 
 _voice_cache: dict[str, Any] = {}
+
+
+def parse_usb_playback_device(aplay_listing: str) -> str | None:
+    for line in aplay_listing.splitlines():
+        if "usb" not in line.lower():
+            continue
+        match = _APLAY_CARD_LINE.match(line.strip())
+        if match is None:
+            continue
+        card = match.group(1)
+        return f"plughw:{card},0"
+    return None
+
+
+def detect_usb_alsa_device() -> str | None:
+    if shutil.which("aplay") is None:
+        logger.debug("aplay not found; cannot detect USB audio device")
+        return None
+
+    try:
+        completed = subprocess.run(
+            ["aplay", "-l"],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=5,
+        )
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError):
+        logger.warning("Failed to list ALSA playback devices", exc_info=True)
+        return None
+
+    device = parse_usb_playback_device(completed.stdout)
+    if device is not None:
+        logger.info("Using USB playback device: %s", device)
+    else:
+        logger.debug("No USB playback card found in aplay -l output")
+    return device
+
+
+def resolve_playback_device(configured: str | None) -> str | None:
+    explicit = normalize_alsa_device(configured)
+    if explicit is not None:
+        return explicit
+    return detect_usb_alsa_device()
 
 
 def normalize_alsa_device(device: str | None) -> str | None:
@@ -115,7 +160,7 @@ def speak_from_config(text: str, tts_cfg: dict[str, Any]) -> None:
         return
 
     engine = tts_cfg.get("engine", "espeak")
-    alsa_device = normalize_alsa_device(tts_cfg.get("alsa_device"))
+    alsa_device = resolve_playback_device(tts_cfg.get("alsa_device"))
     espeak_voice = tts_cfg.get("voice", "en")
 
     if engine == "piper":

@@ -72,18 +72,13 @@ The touchscreen is **not used by v1 software**. It is for future status/kiosk UI
 aplay -l
 ```
 
-4. Test output (replace card/device numbers as needed):
+4. Test output (use the card number from the `aplay -l` line that contains `USB`; on Pi 5 with HDMI this is often card 2):
 
 ```bash
-speaker-test -D plughw:1,0 -c 2 -t wav
+speaker-test -D plughw:2,0 -c 2 -t wav
 ```
 
-5. Set the device in `config/config.yaml`:
-
-```yaml
-tts:
-  alsa_device: "plughw:1,0"
-```
+5. Leave `tts.alsa_device: null` in `config/config.yaml` so the greeter auto-selects the USB card. Set `plughw:N,0` only as an override.
 
 ---
 

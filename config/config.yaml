@@ -52,7 +52,7 @@ camera:
 tts:
   enabled: true
   engine: piper             # piper | espeak
-  alsa_device: null           # e.g. "plughw:1,0" — set after running: aplay -l
+  alsa_device: null           # null = auto USB card from aplay -l; override e.g. plughw:2,0
   voice: en                   # espeak fallback voice
   ask_how_are_you: true
   piper:

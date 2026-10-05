@@ -6,7 +6,32 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from pi_face_greeter.tts import normalize_alsa_device, speak, speak_from_config
+from pi_face_greeter.tts import (
+    normalize_alsa_device,
+    parse_usb_playback_device,
+    resolve_playback_device,
+    speak,
+    speak_from_config,
+)
+
+PI5_APLAY_LISTING = """\
+**** List of PLAYBACK Hardware Devices ****
+card 0: vc4hdmi0 [vc4-hdmi-0], device 0: MAI PCM i2s-hifi-0 [MAI PCM i2s-hifi-0]
+  Subdevices: 1/1
+card 1: vc4hdmi1 [vc4-hdmi-1], device 0: MAI PCM i2s-hifi-0 [MAI PCM i2s-hifi-0]
+  Subdevices: 1/1
+card 2: Device [USB PnP Audio Device], device 0: USB Audio [USB Audio]
+  Subdevices: 1/1
+"""
+
+USB_CARD1_APLAY_LISTING = """\
+card 0: vc4hdmi0 [vc4-hdmi-0], device 0: MAI PCM i2s-hifi-0 [MAI PCM i2s-hifi-0]
+card 1: Device [USB Audio Device], device 0: USB Audio [USB Audio]
+"""
+
+NO_USB_APLAY_LISTING = """\
+card 0: vc4hdmi0 [vc4-hdmi-0], device 0: MAI PCM i2s-hifi-0 [MAI PCM i2s-hifi-0]
+"""
 
 
 def test_speak_invokes_espeak() -> None:
@@ -51,12 +76,15 @@ def test_speak_from_config_respects_disabled() -> None:
 
 
 def test_speak_from_config_delegates_to_speak() -> None:
-    with patch("pi_face_greeter.tts.speak") as mock_speak:
+    with (
+        patch("pi_face_greeter.tts.speak") as mock_speak,
+        patch("pi_face_greeter.tts.resolve_playback_device", return_value="plughw:2,0"),
+    ):
         speak_from_config(
             "Hello",
             {"enabled": True, "engine": "espeak", "voice": "en", "alsa_device": None},
         )
-    mock_speak.assert_called_once_with(text="Hello", voice="en", alsa_device=None)
+    mock_speak.assert_called_once_with(text="Hello", voice="en", alsa_device="plughw:2,0")
 
 
 def test_speak_from_config_uses_piper() -> None:
@@ -90,6 +118,7 @@ def test_speak_from_config_falls_back_to_espeak() -> None:
     with (
         patch("pi_face_greeter.tts.speak_piper", side_effect=RuntimeError("missing model")),
         patch("pi_face_greeter.tts.speak") as mock_speak,
+        patch("pi_face_greeter.tts.resolve_playback_device", return_value=None),
     ):
         speak_from_config(
             "Hello",
@@ -103,6 +132,32 @@ def test_speak_from_config_falls_back_to_espeak() -> None:
         )
 
     mock_speak.assert_called_once_with(text="Hello", voice="en", alsa_device=None)
+
+
+def test_parse_usb_playback_device_pi5_layout() -> None:
+    assert parse_usb_playback_device(PI5_APLAY_LISTING) == "plughw:2,0"
+
+
+def test_parse_usb_playback_device_usb_on_card1() -> None:
+    assert parse_usb_playback_device(USB_CARD1_APLAY_LISTING) == "plughw:1,0"
+
+
+def test_parse_usb_playback_device_no_usb() -> None:
+    assert parse_usb_playback_device(NO_USB_APLAY_LISTING) is None
+
+
+def test_resolve_playback_device_uses_explicit_override() -> None:
+    with patch("pi_face_greeter.tts.detect_usb_alsa_device") as mock_detect:
+        assert resolve_playback_device("plughw:9,0") == "plughw:9,0"
+    mock_detect.assert_not_called()
+
+
+def test_resolve_playback_device_detects_usb_when_unconfigured() -> None:
+    with patch(
+        "pi_face_greeter.tts.detect_usb_alsa_device",
+        return_value="plughw:2,0",
+    ):
+        assert resolve_playback_device(None) == "plughw:2,0"
 
 
 def test_speak_piper_raises_when_model_missing(tmp_path: Path) -> None:
