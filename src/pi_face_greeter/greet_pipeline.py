@@ -85,7 +85,7 @@ def run_greeting_interaction(
         camera_disabled=camera_disabled,
     )
 
-    if _conversation_enabled(conversation, ollama) and not camera_disabled:
+    if conversation_enabled(conversation, ollama) and not camera_disabled:
         run_conversation(
             name,
             greeting,
