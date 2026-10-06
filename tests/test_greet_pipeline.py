@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from pi_face_greeter.greet_pipeline import run_greeting_interaction
 
@@ -33,7 +33,8 @@ def test_run_greeting_interaction_uses_conversation_when_enabled() -> None:
             ollama_cfg={"enabled": True},
             conversation_cfg={"enabled": True},
             stt_cfg={"enabled": True},
-            assistant_cfg={"name": "Vesper"},
+            assistant_cfg={"name": "Freyja"},
+            mic=MagicMock(),
         )
 
     assert result == "Hi, Todd. How are you?"

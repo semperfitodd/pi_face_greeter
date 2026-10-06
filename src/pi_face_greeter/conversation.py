@@ -1,17 +1,19 @@
 from __future__ import annotations
 
 import logging
+import queue
 import re
+import threading
+import time
+from collections.abc import Callable, Iterator
 from datetime import datetime
 from typing import Any
-
 from urllib.parse import urlparse
 
-from collections.abc import Callable
-
 from pi_face_greeter import ollama_client
+from pi_face_greeter.mic import MicStream
 from pi_face_greeter.stt import listen_from_config
-from pi_face_greeter.tts import speak_from_config
+from pi_face_greeter.tts import play_chime, speak_from_config
 
 logger = logging.getLogger("pi_face_greeter.conversation")
 
@@ -40,7 +42,8 @@ def validate_ollama_base_url(base_url: str) -> str:
 MAX_GREETING_CHARS = 280
 MAX_REPLY_CHARS = 400
 
-DEFAULT_ASSISTANT_NAME = "Vesper"
+DEFAULT_ASSISTANT_NAME = "Freyja"
+WAKE_HINT = 'Say "Hey Freyja" to talk'
 DEFAULT_SYSTEM_PROMPT = (
     "You are {assistant_name}, a helpful executive assistant speaking out loud. "
     "The person with you is {person_label}. It is {time_of_day}. "
@@ -129,10 +132,95 @@ def _is_goodbye(text: str) -> bool:
     return bool(_GOODBYE_PATTERN.search(text))
 
 
+def iter_sentences_from_tokens(tokens: Iterator[str]) -> Iterator[str]:
+    buffer = ""
+    for token in tokens:
+        buffer += token
+        while True:
+            match = re.search(r"(.+?[.!?])(?:\s+|$)", buffer)
+            if match is None:
+                break
+            sentence = match.group(1).strip()
+            buffer = buffer[match.end() :]
+            if sentence:
+                yield sentence
+    remainder = buffer.strip()
+    if remainder:
+        yield remainder
+
+
+def _speak_streamed_reply(
+    messages: list[dict[str, str]],
+    *,
+    settings: dict[str, Any],
+    max_tokens: int,
+    temperature: float,
+    keep_alive: str | None,
+    tts_cfg: dict[str, Any],
+    mic: MicStream | None,
+    on_status: Callable[[str], None] | None,
+    on_before_speak: Callable[[str], None] | None,
+    on_after_speak: Callable[[], None] | None,
+) -> str:
+    token_iter = ollama_client.chat_stream(
+        messages,
+        base_url=settings["base_url"],
+        model=settings["model"],
+        timeout=settings["timeout"],
+        max_tokens=max_tokens,
+        temperature=temperature,
+        keep_alive=keep_alive,
+    )
+    sentence_queue: queue.Queue[str | None] = queue.Queue()
+    spoken_parts: list[str] = []
+    display = ""
+
+    def speaker_worker() -> None:
+        while True:
+            sentence = sentence_queue.get()
+            if sentence is None:
+                break
+            cleaned = _sanitize_reply(sentence)
+            if not cleaned:
+                continue
+            if mic is not None:
+                mic.pause()
+            try:
+                if on_before_speak is not None:
+                    on_before_speak(cleaned)
+                speak_from_config(cleaned, tts_cfg)
+            finally:
+                if on_after_speak is not None:
+                    on_after_speak()
+                if mic is not None:
+                    time.sleep(0.25)
+                    mic.resume()
+
+    worker = threading.Thread(target=speaker_worker, name="tts-stream", daemon=True)
+    worker.start()
+
+    try:
+        for sentence in iter_sentences_from_tokens(token_iter):
+            display = _sanitize_reply(" ".join([*spoken_parts, sentence]).strip())
+            if on_status is not None and display:
+                on_status(display)
+            spoken_parts.append(sentence)
+            sentence_queue.put(sentence)
+    finally:
+        sentence_queue.put(None)
+        worker.join(timeout=120)
+
+    full_reply = _sanitize_reply(" ".join(spoken_parts).strip())
+    if not full_reply:
+        raise RuntimeError("Ollama chat reply empty after sanitization")
+    return full_reply
+
+
 def run_conversation(
     name: str | None,
     opener: str,
     *,
+    mic: MicStream | None,
     tts_cfg: dict[str, Any],
     stt_cfg: dict[str, Any],
     ollama_cfg: dict[str, Any],
@@ -141,10 +229,20 @@ def run_conversation(
     on_status: Callable[[str], None] | None = None,
     on_before_speak: Callable[[str], None] | None = None,
     on_after_speak: Callable[[], None] | None = None,
+    skip_opener: bool = False,
+    require_presence: bool = True,
+    is_present: Callable[[], bool] | None = None,
     now: datetime | None = None,
 ) -> None:
     if not conversation_enabled(conversation_cfg, ollama_cfg):
-        speak_from_config(opener, tts_cfg)
+        if opener and not skip_opener:
+            speak_from_config(opener, tts_cfg)
+        return
+
+    if mic is None:
+        logger.warning("Conversation enabled but mic stream is unavailable")
+        if opener and not skip_opener:
+            speak_from_config(opener, tts_cfg)
         return
 
     settings = _ollama_settings(ollama_cfg)
@@ -152,32 +250,44 @@ def run_conversation(
     if keep_alive is not None:
         keep_alive = str(keep_alive)
 
-    max_turns = int(conversation_cfg.get("max_turns", 4))
+    max_turns = int(conversation_cfg.get("max_turns", 20))
     max_tokens = int(conversation_cfg.get("max_tokens", ollama_cfg.get("max_tokens", 120)))
     temperature = float(conversation_cfg.get("temperature", ollama_cfg.get("temperature", 0.7)))
+    listen_chime = bool(conversation_cfg.get("listen_chime", True))
 
     system_prompt = build_system_prompt(name, assistant_cfg=assistant_cfg, now=now)
-    messages: list[dict[str, str]] = [
-        {"role": "system", "content": system_prompt},
-        {"role": "assistant", "content": opener},
-    ]
+    messages: list[dict[str, str]] = [{"role": "system", "content": system_prompt}]
+    if not skip_opener and opener:
+        messages.append({"role": "assistant", "content": opener})
 
     def status(text: str) -> None:
         if on_status is not None:
             on_status(text)
 
     def speak_line(text: str) -> None:
-        if on_before_speak is not None:
-            on_before_speak(text)
-        speak_from_config(text, tts_cfg)
-        if on_after_speak is not None:
-            on_after_speak()
+        mic.pause()
+        try:
+            if on_before_speak is not None:
+                on_before_speak(text)
+            speak_from_config(text, tts_cfg)
+        finally:
+            if on_after_speak is not None:
+                on_after_speak()
+            time.sleep(0.25)
+            mic.resume()
 
-    speak_line(opener)
+    if not skip_opener and opener:
+        speak_line(opener)
 
     for turn in range(max_turns):
+        if require_presence and is_present is not None and not is_present():
+            logger.info("Conversation ended: face not present")
+            break
+
+        if listen_chime:
+            play_chime(tts_cfg)
         status("Listening...")
-        user_text = listen_from_config(stt_cfg)
+        user_text = listen_from_config(mic, stt_cfg)
         if not user_text:
             logger.info("Conversation ended: no speech (turn %d)", turn + 1)
             break
@@ -189,26 +299,26 @@ def run_conversation(
             logger.info("Conversation ended: user goodbye")
             break
 
+        status("Thinking...")
         try:
-            raw = ollama_client.chat(
+            reply = _speak_streamed_reply(
                 messages,
-                base_url=settings["base_url"],
-                model=settings["model"],
-                timeout=settings["timeout"],
+                settings=settings,
                 max_tokens=max_tokens,
                 temperature=temperature,
                 keep_alive=keep_alive,
+                tts_cfg=tts_cfg,
+                mic=mic,
+                on_status=status,
+                on_before_speak=on_before_speak,
+                on_after_speak=on_after_speak,
             )
-            reply = _sanitize_reply(raw)
-            if not reply:
-                raise RuntimeError("Ollama chat reply empty after sanitization")
         except Exception:
             logger.warning("Ollama chat failed on turn %d", turn + 1, exc_info=True)
             break
 
         messages.append({"role": "assistant", "content": reply})
         status(reply)
-        speak_line(reply)
 
     status("")
 

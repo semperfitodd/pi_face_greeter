@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 from typing import Any
 
 from kivy.clock import Clock
@@ -12,11 +13,15 @@ from kivy.uix.screenmanager import Screen
 from pi_face_greeter.app.camera_preview import CameraPreview
 from pi_face_greeter.app.camera_source import CameraSource
 from pi_face_greeter.app.face_widget import AnimatedFace
+from pi_face_greeter.conversation import WAKE_HINT
 from pi_face_greeter.greet_pipeline import run_greeting_interaction
 from pi_face_greeter.identity_vote import PENDING, IdentityVoter
+from pi_face_greeter.mic import MicStream
 from pi_face_greeter.per_person_cooldown import PerPersonCooldown, cooldown_key
 from pi_face_greeter.presence import should_trigger_greeting
 from pi_face_greeter.recognition import get_person_cooldown, get_person_greeting, identify
+from pi_face_greeter.wake_word import WakeWordListener
+
 logger = logging.getLogger("pi_face_greeter.face_screen")
 
 
@@ -30,6 +35,8 @@ class FaceScreen(Screen):
         conversation_cfg: dict[str, Any] | None = None,
         stt_cfg: dict[str, Any] | None = None,
         assistant_cfg: dict[str, Any] | None = None,
+        wake_cfg: dict[str, Any] | None = None,
+        mic: MicStream | None = None,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -40,7 +47,11 @@ class FaceScreen(Screen):
         self._conversation_cfg = conversation_cfg or {}
         self._stt_cfg = stt_cfg or {}
         self._assistant_cfg = assistant_cfg or {}
+        self._mic = mic
         self._pending_cooldown_key: str | None = None
+        self._last_face_seen = 0.0
+        self._last_confirmed_name: str | None = None
+        self._presence_grace = float(self._conversation_cfg.get("presence_grace_seconds", 8))
 
         cooldown_seconds = float(ui_cfg.get("greet_cooldown_seconds", 30))
         self._cooldown = PerPersonCooldown(cooldown_seconds)
@@ -52,9 +63,18 @@ class FaceScreen(Screen):
         self._status_label: Label | None = None
         self._animated_face: AnimatedFace | None = None
         self._tick_event = None
+        self._wake_listener: WakeWordListener | None = None
 
         self._build_ui()
         Clock.schedule_once(self._start_presence_watch, 0)
+
+        if self._mic is not None and wake_cfg is not None:
+            self._wake_listener = WakeWordListener(
+                wake_cfg,
+                self._mic,
+                on_wake=self._schedule_wake_conversation,
+            )
+            self._wake_listener.start()
 
     def _start_presence_watch(self, _dt=None) -> None:
         if self._tick_event is None:
@@ -73,9 +93,18 @@ class FaceScreen(Screen):
     def on_leave(self, *_args) -> None:
         self.stop_presence_watch()
 
+    def shutdown(self) -> None:
+        if self._wake_listener is not None:
+            self._wake_listener.stop()
+
     def _reset_presence_state(self) -> None:
         self._consecutive_face_frames = 0
         self._identity_voter.reset()
+
+    def _is_present(self) -> bool:
+        if self._last_face_seen <= 0:
+            return False
+        return time.monotonic() - self._last_face_seen < self._presence_grace
 
     def _build_ui(self) -> None:
         root = FloatLayout()
@@ -130,9 +159,10 @@ class FaceScreen(Screen):
 
         if snapshot.boxes:
             self._consecutive_face_frames += 1
+            self._last_face_seen = time.monotonic()
         else:
             self._reset_presence_state()
-            if self._status_label is not None:
+            if self._status_label is not None and not self._cooldown_active_for_display():
                 self._status_label.text = ""
             return
 
@@ -157,24 +187,62 @@ class FaceScreen(Screen):
             )
             return
 
+        if confirmed:
+            self._last_confirmed_name = confirmed
+
         key = cooldown_key(confirmed)
         person_cooldown = get_person_cooldown(confirmed)
         if person_cooldown is not None:
             self._cooldown.set_duration(key, person_cooldown)
 
         if not self._cooldown.can_trigger(key):
-            remaining = int(self._cooldown.seconds_remaining(key))
             if self._status_label is not None:
-                label = confirmed or "friend"
-                self._status_label.text = f"Cooldown for {label} ({remaining}s)"
+                self._status_label.text = WAKE_HINT
             return
 
         self._trigger_greeting(confirmed, confidence)
+
+    def _cooldown_active_for_display(self) -> bool:
+        key = cooldown_key(self._last_confirmed_name)
+        return not self._cooldown.can_trigger(key)
+
+    def _pause_wake_listener(self) -> None:
+        if self._wake_listener is not None:
+            self._wake_listener.pause()
+
+    def _resume_wake_listener(self) -> None:
+        if self._wake_listener is not None:
+            self._wake_listener.resume()
+
+    def _schedule_wake_conversation(self) -> None:
+        Clock.schedule_once(lambda _dt: self._trigger_wake_conversation(), 0)
+
+    def _trigger_wake_conversation(self) -> None:
+        if self._greeting_in_progress:
+            return
+        self._greeting_in_progress = True
+        self._pause_wake_listener()
+        self._pending_cooldown_key = None
+        name = self._last_confirmed_name
+        logger.info("Wake word conversation for %s", name or "unknown")
+
+        thread = threading.Thread(
+            target=self._speak_and_finish,
+            kwargs={
+                "name": name,
+                "custom_greeting": None,
+                "skip_opener": True,
+                "require_presence": False,
+            },
+            daemon=True,
+        )
+        thread.start()
 
     def _trigger_greeting(self, name: str | None, confidence: float) -> None:
         self._greeting_in_progress = True
         self._reset_presence_state()
         self._pending_cooldown_key = cooldown_key(name)
+        self._pause_wake_listener()
 
         if name:
             logger.info("Recognized %s (confidence %.2f)", name, confidence)
@@ -183,7 +251,12 @@ class FaceScreen(Screen):
 
         thread = threading.Thread(
             target=self._speak_and_finish,
-            args=(name, get_person_greeting(name)),
+            kwargs={
+                "name": name,
+                "custom_greeting": get_person_greeting(name),
+                "skip_opener": False,
+                "require_presence": True,
+            },
             daemon=True,
         )
         thread.start()
@@ -204,7 +277,14 @@ class FaceScreen(Screen):
     def _on_status(self, text: str) -> None:
         Clock.schedule_once(lambda _dt: self._set_status(text), 0)
 
-    def _speak_and_finish(self, name: str | None, custom_greeting: str | None) -> None:
+    def _speak_and_finish(
+        self,
+        name: str | None,
+        custom_greeting: str | None,
+        *,
+        skip_opener: bool,
+        require_presence: bool,
+    ) -> None:
         try:
             greeting = run_greeting_interaction(
                 name,
@@ -217,8 +297,12 @@ class FaceScreen(Screen):
                 on_status=self._on_status,
                 on_before_speak=self._on_before_speak,
                 on_after_speak=self._on_after_speak,
+                mic=self._mic,
+                skip_opener=skip_opener,
+                require_presence=require_presence,
+                is_present=self._is_present,
             )
-            logger.info("Greeting interaction complete: %s", greeting)
+            logger.info("Greeting interaction complete: %s", greeting or "(wake)")
         except Exception:
             logger.exception("Greeting interaction failed")
         finally:
@@ -231,3 +315,4 @@ class FaceScreen(Screen):
             self._cooldown.mark_triggered(self._pending_cooldown_key)
             self._pending_cooldown_key = None
         self._greeting_in_progress = False
+        self._resume_wake_listener()

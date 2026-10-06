@@ -149,27 +149,41 @@ def test_ollama() -> int:
 
 
 def test_stt() -> int:
-    from pi_face_greeter.stt import listen_from_config, resolve_capture_device
+    from pi_face_greeter.mic import create_mic_stream
+    from pi_face_greeter.alsa_devices import resolve_audio_devices
+    from pi_face_greeter.stt import listen_from_config
 
     config = load_config()
     setup_logging(level=config.get("logging", {}).get("level", "INFO"))
 
     stt_cfg = config.get("stt", {})
-    device = resolve_capture_device(stt_cfg.get("alsa_device"))
+    tts_cfg = config.get("tts", {})
+    playback, device = resolve_audio_devices(
+        playback_configured=tts_cfg.get("alsa_device"),
+        capture_configured=stt_cfg.get("alsa_device"),
+    )
 
-    print("Speech-to-text test (USB mic)")
+    print("Speech-to-text test (USB mic + Silero VAD)")
+    if playback:
+        print(f"Playback device: {playback}")
+    else:
+        print("Playback device: system default (no USB card found; run aplay -l)")
     if device:
         print(f"Capture device: {device}")
     else:
         print("Capture device: system default (no USB card found; run arecord -l)")
     print("Speak after the prompt. Recording stops after a short pause.\n")
 
+    mic = create_mic_stream(stt_cfg, tts_cfg)
     try:
-        text = listen_from_config(stt_cfg)
+        mic.start()
+        text = listen_from_config(mic, stt_cfg)
     except Exception as exc:
         print(f"STT test failed: {exc}", file=sys.stderr)
         logger.exception("STT test failed")
         return 1
+    finally:
+        mic.stop()
 
     if not text:
         print("No speech detected or transcription was empty.", file=sys.stderr)
@@ -177,4 +191,45 @@ def test_stt() -> int:
 
     print(f"Transcript: {text}")
     print("STT test complete.")
+    return 0
+
+
+def test_wake() -> int:
+    from pi_face_greeter.mic import create_mic_stream
+    from pi_face_greeter.wake_word import WakeWordListener
+
+    config = load_config()
+    setup_logging(level=config.get("logging", {}).get("level", "INFO"))
+
+    stt_cfg = config.get("stt", {})
+    tts_cfg = config.get("tts", {})
+    wake_cfg = config.get("wake_word", {})
+    detections = 0
+
+    def on_wake() -> None:
+        nonlocal detections
+        detections += 1
+        print(f"[{time.strftime('%H:%M:%S')}] Wake word detected (#{detections})")
+
+    print("Wake word test for 30 seconds. Say the configured wake phrase.")
+    print(f"Model: {wake_cfg.get('model')}\n")
+
+    mic = create_mic_stream(stt_cfg, tts_cfg)
+    listener = WakeWordListener(wake_cfg, mic, on_wake=on_wake)
+    try:
+        mic.start()
+        listener.start()
+        if not listener.enabled:
+            print("Wake word listener did not start. Check model path and openwakeword install.")
+            return 1
+        end_time = time.monotonic() + 30
+        while time.monotonic() < end_time:
+            time.sleep(0.5)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        listener.stop()
+        mic.stop()
+
+    print(f"\nWake word test complete. Detections: {detections}")
     return 0

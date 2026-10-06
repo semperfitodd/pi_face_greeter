@@ -2,7 +2,7 @@ app:
   name: Pi Face Greeter
 
 assistant:
-  name: Vesper
+  name: Freyja
   system_prompt: >
     You are {assistant_name}, a helpful executive assistant speaking out loud.
     The person with you is {person_label}. It is {time_of_day}.
@@ -11,21 +11,29 @@ assistant:
     Do not mention being an AI.
 
 conversation:
-  enabled: false
-  max_turns: 4
+  enabled: true
+  max_turns: 20
   max_tokens: 120
   temperature: 0.7
+  presence_grace_seconds: 8
+  listen_chime: true
+
+wake_word:
+  enabled: true
+  model: data/models/hey_freyja.onnx
+  threshold: 0.5
 
 stt:
   enabled: true
   alsa_device: null
   model: data/models/faster-whisper-tiny.en
+  vad_model: data/models/silero_vad.onnx
+  vad_threshold: 0.5
   compute_type: int8
   language: en
   max_record_seconds: 8
-  silence_seconds: 1.2
-  start_timeout_seconds: 5
-  speech_rms_threshold: 400
+  silence_seconds: 0.8
+  start_timeout_seconds: 6
 
 ui:
   fullscreen: true
@@ -45,7 +53,7 @@ detection:
   use_clahe: true
 
 diagnostics:
-  debug: false                 # also enabled by env PI_FACE_GREETER_DEBUG=1
+  debug: false
   snapshot_dir: data/debug
   snapshot_interval_seconds: 2.0
   max_retained_snapshots: 50
@@ -59,7 +67,7 @@ validation:
 enrollment:
   capture_count: 5
   delay_seconds: 2
-  sample_interval_seconds: 0.4   # kiosk settings capture interval
+  sample_interval_seconds: 0.4
   known_faces_dir: data/known_faces
 
 pir:
@@ -68,7 +76,7 @@ pir:
 
 camera:
   enabled: true
-  backend: picamera2          # picamera2 | opencv (usb only)
+  backend: picamera2
   capture_dir: data/captured
   max_retained_captures: 50
   width: 640
@@ -77,9 +85,9 @@ camera:
 
 tts:
   enabled: true
-  engine: piper             # piper | espeak
-  alsa_device: null           # null = auto USB card from aplay -l; override e.g. plughw:2,0
-  voice: en                   # espeak fallback voice
+  engine: piper
+  alsa_device: null
+  voice: en
   ask_how_are_you: true
   piper:
     model: data/voices/en_US-amy-medium.onnx
@@ -87,18 +95,18 @@ tts:
   placeholder_greeting: "Hello. Face recognition is not enabled yet."
 
 ollama:
-  enabled: false
+  enabled: true
   base_url: http://localhost:11434
   model: llama3.2:1b
-  timeout_seconds: 30          # cold model load on Pi can exceed 8s
-  warmup_timeout_seconds: 60   # used once at app startup
+  timeout_seconds: 30
+  warmup_timeout_seconds: 60
   warmup_on_startup: true
-  keep_alive: 10m               # keep model loaded while greeter runs
+  keep_alive: 10m
   max_tokens: 60
   temperature: 0.7
 
 logging:
   level: INFO
   file: data/logs/greeter.log
-  max_bytes: 1000000          # rotate when greeter.log exceeds this (~1 MB)
-  backup_count: 3             # keep N rotated backups; total ~max_bytes * (backup_count + 1)
+  max_bytes: 1000000
+  backup_count: 3

@@ -10,69 +10,21 @@ import wave
 from pathlib import Path
 from typing import Any
 
+import numpy as np
+
+from pi_face_greeter.alsa_devices import (
+    detect_usb_playback_device as detect_usb_alsa_device,
+    normalize_alsa_device,
+    parse_usb_playback_device,
+    resolve_playback_device,
+)
 from pi_face_greeter.config_loader import PROJECT_ROOT
+
+_CHIME_SAMPLE_RATE = 16000
 
 logger = logging.getLogger("pi_face_greeter.tts")
 
-_ALSA_DEVICE_PATTERN = re.compile(r"^(default|plughw:\d+,\d+|hw:\d+,\d+)$")
-_APLAY_CARD_LINE = re.compile(r"^card (\d+):", re.IGNORECASE)
-
 _voice_cache: dict[str, Any] = {}
-
-
-def parse_usb_playback_device(aplay_listing: str) -> str | None:
-    for line in aplay_listing.splitlines():
-        if "usb" not in line.lower():
-            continue
-        match = _APLAY_CARD_LINE.match(line.strip())
-        if match is None:
-            continue
-        card = match.group(1)
-        return f"plughw:{card},0"
-    return None
-
-
-def detect_usb_alsa_device() -> str | None:
-    if shutil.which("aplay") is None:
-        logger.debug("aplay not found; cannot detect USB audio device")
-        return None
-
-    try:
-        completed = subprocess.run(
-            ["aplay", "-l"],
-            capture_output=True,
-            text=True,
-            check=True,
-            timeout=5,
-        )
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError):
-        logger.warning("Failed to list ALSA playback devices", exc_info=True)
-        return None
-
-    device = parse_usb_playback_device(completed.stdout)
-    if device is not None:
-        logger.info("Using USB playback device: %s", device)
-    else:
-        logger.debug("No USB playback card found in aplay -l output")
-    return device
-
-
-def resolve_playback_device(configured: str | None) -> str | None:
-    explicit = normalize_alsa_device(configured)
-    if explicit is not None:
-        return explicit
-    return detect_usb_alsa_device()
-
-
-def normalize_alsa_device(device: str | None) -> str | None:
-    if device is None:
-        return None
-    token = str(device).strip()
-    if not token:
-        return None
-    if not _ALSA_DEVICE_PATTERN.match(token):
-        raise ValueError(f"Invalid ALSA device: {device!r}")
-    return token
 
 
 def speak(text: str, voice: str = "en", alsa_device: str | None = None) -> None:
@@ -154,11 +106,52 @@ def speak_piper(
             Path(wav_path).unlink(missing_ok=True)
 
 
+def apply_speech_pronunciation(text: str) -> str:
+    return re.sub(r"\bFreyja\b", "Fraya", text, flags=re.IGNORECASE)
+
+
+def play_chime(tts_cfg: dict[str, Any]) -> None:
+    if shutil.which("aplay") is None:
+        return
+
+    alsa_device = resolve_playback_device(tts_cfg.get("alsa_device"))
+    sample_rate = _CHIME_SAMPLE_RATE
+    tone_a = 880.0
+    tone_b = 1174.7
+    duration = 0.08
+    t = np.linspace(0, duration, int(sample_rate * duration), endpoint=False)
+    wave_a = (0.25 * np.sin(2 * np.pi * tone_a * t)).astype(np.float32)
+    wave_b = (0.25 * np.sin(2 * np.pi * tone_b * t)).astype(np.float32)
+    envelope = np.linspace(1.0, 0.2, wave_a.size, dtype=np.float32)
+    pcm = np.concatenate([(wave_a * envelope), (wave_b * envelope)])
+    pcm_int16 = (pcm * 32767).astype(np.int16)
+
+    wav_path: str | None = None
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as handle:
+            wav_path = handle.name
+        with wave.open(wav_path, "wb") as wav_file:
+            wav_file.setnchannels(1)
+            wav_file.setsampwidth(2)
+            wav_file.setframerate(sample_rate)
+            wav_file.writeframes(pcm_int16.tobytes())
+
+        command = ["aplay", "-q"]
+        if alsa_device:
+            command.extend(["-D", alsa_device])
+        command.append(wav_path)
+        subprocess.run(command, check=True)
+    finally:
+        if wav_path is not None:
+            Path(wav_path).unlink(missing_ok=True)
+
+
 def speak_from_config(text: str, tts_cfg: dict[str, Any]) -> None:
     if not tts_cfg.get("enabled", True):
         logger.info("TTS disabled in config, skipping speech")
         return
 
+    text = apply_speech_pronunciation(text)
     engine = tts_cfg.get("engine", "espeak")
     alsa_device = resolve_playback_device(tts_cfg.get("alsa_device"))
     espeak_voice = tts_cfg.get("voice", "en")

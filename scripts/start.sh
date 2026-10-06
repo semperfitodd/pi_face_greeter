@@ -7,6 +7,7 @@ cd "$PROJECT_ROOT"
 OLLAMA_MODEL="${OLLAMA_MODEL:-llama3.2:1b}"
 PIPER_MODEL="${PIPER_MODEL_NAME:-en_US-amy-medium}"
 WHISPER_MODEL_DIR="$PROJECT_ROOT/data/models/faster-whisper-tiny.en"
+VAD_MODEL="$PROJECT_ROOT/data/models/silero_vad.onnx"
 
 system_tools_missing() {
   local tool
@@ -22,11 +23,12 @@ venv_ready() {
   [[ -d "$PROJECT_ROOT/.venv" ]] || return 1
   # shellcheck disable=SC1091
   source "$PROJECT_ROOT/.venv/bin/activate"
-  python -c "import pi_face_greeter, piper, faster_whisper" >/dev/null 2>&1 || return 1
+  python -c "import pi_face_greeter, piper, faster_whisper, onnxruntime" >/dev/null 2>&1 || return 1
 
   local piper_model="$PROJECT_ROOT/data/voices/${PIPER_MODEL}.onnx"
   [[ -f "$piper_model" ]] || return 1
   [[ -f "$WHISPER_MODEL_DIR/model.bin" ]] || return 1
+  [[ -f "$VAD_MODEL" ]] || return 1
   return 0
 }
 
@@ -83,7 +85,7 @@ conversation_enabled = bool(config.get("conversation", {}).get("enabled", False)
 if not ollama_enabled:
     print(
         "Warning: ollama.enabled is false in config/config.yaml; "
-        "Vesper will not use the local LLM."
+        "Freyja will not use the local LLM."
     )
 if not conversation_enabled:
     print(

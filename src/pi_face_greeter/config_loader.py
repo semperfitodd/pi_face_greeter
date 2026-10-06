@@ -46,6 +46,13 @@ def _resolve_paths(config: dict[str, Any]) -> None:
     stt_cfg = config.get("stt", {})
     if stt_model := stt_cfg.get("model"):
         stt_cfg["model"] = str(_resolve_project_path(stt_model))
+    if vad_model := stt_cfg.get("vad_model"):
+        stt_cfg["vad_model"] = str(_resolve_project_path(vad_model))
+
+    wake_cfg = config.get("wake_word", {})
+    if wake_model := wake_cfg.get("model"):
+        if str(wake_model).endswith(".onnx"):
+            wake_cfg["model"] = str(_resolve_project_path(wake_model))
 
 
 def _resolve_project_path(value: str) -> Path:

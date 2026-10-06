@@ -9,6 +9,7 @@ from pi_face_greeter.conversation import (
     generate_greeting,
     run_conversation,
 )
+from pi_face_greeter.mic import MicStream
 from pi_face_greeter.greeting import build_greeting
 from pi_face_greeter.recognition import get_person_greeting
 from pi_face_greeter.tts import speak_from_config
@@ -70,6 +71,10 @@ def run_greeting_interaction(
     on_status: Callable[[str], None] | None = None,
     on_before_speak: Callable[[str], None] | None = None,
     on_after_speak: Callable[[], None] | None = None,
+    mic: MicStream | None = None,
+    skip_opener: bool = False,
+    require_presence: bool = True,
+    is_present: Callable[[], bool] | None = None,
 ) -> str:
     ollama = ollama_cfg or {}
     conversation = conversation_cfg or {}
@@ -86,9 +91,11 @@ def run_greeting_interaction(
     )
 
     if conversation_enabled(conversation, ollama) and not camera_disabled:
+        opener = "" if skip_opener else greeting
         run_conversation(
             name,
-            greeting,
+            opener,
+            mic=mic,
             tts_cfg=tts_cfg,
             stt_cfg=stt,
             ollama_cfg=ollama,
@@ -97,8 +104,11 @@ def run_greeting_interaction(
             on_status=on_status,
             on_before_speak=on_before_speak,
             on_after_speak=on_after_speak,
+            skip_opener=skip_opener,
+            require_presence=require_presence,
+            is_present=is_present,
         )
-        return greeting
+        return greeting if not skip_opener else ""
 
     if on_before_speak is not None:
         on_before_speak(greeting)
@@ -118,6 +128,10 @@ def speak_greeting(
     assistant_cfg: dict[str, Any] | None = None,
     custom_greeting: str | None = None,
     camera_disabled: bool = False,
+    mic: MicStream | None = None,
+    skip_opener: bool = False,
+    require_presence: bool = True,
+    is_present: Callable[[], bool] | None = None,
 ) -> str:
     return run_greeting_interaction(
         name,
@@ -128,4 +142,8 @@ def speak_greeting(
         assistant_cfg=assistant_cfg,
         custom_greeting=custom_greeting,
         camera_disabled=camera_disabled,
+        mic=mic,
+        skip_opener=skip_opener,
+        require_presence=require_presence,
+        is_present=is_present,
     )

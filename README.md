@@ -77,7 +77,9 @@ drawio -x -f png -o architecture/architecture.png architecture/architecture.draw
 | PIR | `src/pi_face_greeter/pir_sensor.py` | gpiozero wrapper for AM312 |
 | Camera | `src/pi_face_greeter/camera.py` | Picamera2 (CSI) backend |
 | TTS | `src/pi_face_greeter/tts.py` | Piper neural TTS (espeak-ng fallback) |
-| Conversation | `src/pi_face_greeter/conversation.py` | Vesper voice chat + optional one-shot Ollama greetings |
+| Conversation | `src/pi_face_greeter/conversation.py` | Freyja voice chat + optional one-shot Ollama greetings |
+| Mic / VAD | `src/pi_face_greeter/mic.py`, `vad.py` | Shared USB mic stream + Silero speech detection |
+| Wake word | `src/pi_face_greeter/wake_word.py` | openWakeWord listener ("Hey Freyja") |
 | Speech-to-text | `src/pi_face_greeter/stt.py` | USB mic capture + faster-whisper |
 | Ollama client | `src/pi_face_greeter/ollama_client.py` | HTTP client for local Ollama |
 | Config | `config/config.yaml` | Runtime settings |
@@ -229,7 +231,7 @@ card 1: vc4hdmi1 [vc4-hdmi-1], device 0: ...
 card 2: Device [USB PnP Audio Device], device 0: USB Audio [USB Audio]
 ```
 
-The greeter **automatically uses the USB playback card** when `tts.alsa_device` is `null` (default). You do not need to hardcode a card number.
+The greeter **automatically picks USB ALSA cards** when `tts.alsa_device` and `stt.alsa_device` are `null` (default). Playback uses the first USB card in `aplay -l`. Capture uses the first USB card in `arecord -l`, but if you have **separate USB speaker and mic dongles**, it prefers a capture card **different from** the playback card so the mic is not the speaker adapter.
 
 2. Test the USB speaker manually (use the card number from your `aplay -l` line that contains `USB`):
 
@@ -339,7 +341,7 @@ Primary experience on the Hosyond 5" DSI touchscreen:
 
 Or, with the venv already active: `pi-face-greeter-app`.
 
-- **Face screen (default):** Animated face with random blinking eyes and moving mouth during speech. Live camera preview in the upper-left corner; yellow box on detected faces. Greets recognized people with **Hi, \<name\>. How are you?** (or a custom `greeting:` from `people.yaml`). With voice conversation enabled, **Vesper** listens and replies through the local Ollama model.
+- **Face screen (default):** Animated face with random blinking eyes and moving mouth during speech. Live camera preview in the upper-left corner; yellow box on detected faces. Greets recognized people with **Hi, \<name\>. How are you?** (or a custom `greeting:` from `people.yaml`). With voice conversation enabled, **Freyja** listens and replies through the local Ollama model. During greet cooldown, say **Hey Freyja** to start talking again.
 - **Settings screen:** Swipe left. Add, list, edit, and delete faces. **Add Face** captures photos from the live camera (same `CameraSource` as the face screen), computes face embeddings, and reloads recognition without restarting the app.
 
 On Mac for UI development, set `camera.backend: opencv` in `config/config.yaml` and install dev deps: `pip install -e ".[dev]"`.
@@ -376,45 +378,45 @@ The voice model is downloaded **once per Pi**, not per face or greeting. To swap
 
 Use `tts.engine: espeak` to force the old robotic voice. Toggle `tts.ask_how_are_you: false` to skip the follow-up question.
 
-### Vesper voice conversation (mic + Ollama)
+### Freyja voice conversation (mic + Ollama)
 
-**Vesper** is the built-in executive assistant. With `conversation.enabled: true` and `ollama.enabled: true`, the greeter speaks a fixed opener, listens on the USB mic, and runs a short multi-turn chat through local **Ollama** (`/api/chat`). Replies are spoken with Piper. Shipped config keeps both features **off** until you opt in. `ollama.base_url` must be `http://localhost` or `http://127.0.0.1`.
+**Freyja** is the built-in executive assistant. The default config enables conversation: face recognized → **Hi, {name}. How are you?** → listen → local **Ollama** reply (streamed sentence-by-sentence) → listen again. Cooldown only blocks repeating the face greeting; say **Hey Freyja** anytime to talk. `ollama.base_url` must be `http://localhost` or `http://127.0.0.1`.
 
 One-time setup (included in `./scripts/setup_system.sh` and `./scripts/setup_venv.sh`):
 
 ```bash
 ./scripts/setup_system.sh   # installs Ollama (log out/in after)
-./scripts/setup_venv.sh     # Piper + faster-whisper + llama3.2:1b
+./scripts/setup_venv.sh     # Piper + faster-whisper + Silero VAD + llama3.2:1b
 ```
 
-Enable in `config/config.yaml`:
+Key settings in `config/config.yaml`:
 
 ```yaml
 ollama:
   enabled: true
-  model: llama3.2:1b
-  timeout_seconds: 30
-  warmup_on_startup: true
-  keep_alive: 10m
-
 conversation:
   enabled: true
-  max_turns: 4
-
+  listen_chime: true
 assistant:
-  name: Vesper
-
+  name: Freyja
+wake_word:
+  enabled: true
+  model: data/models/hey_freyja.onnx   # or hey_jarvis to test before training
 stt:
-  alsa_device: null   # auto USB capture; override e.g. plughw:3,0 if mic is card 3
+  alsa_device: null   # override only if auto-detect picks the wrong dongle
+  vad_threshold: 0.5
 ```
 
-If `ollama.enabled` is true but `conversation.enabled` is false, the greeter can still use Ollama for one-shot varied greetings (legacy mode) instead of Vesper’s fixed opener + mic loop.
+**Custom wake word:** Train `hey_freyja.onnx` with the [openWakeWord training notebook](https://github.com/dscripka/openWakeWord). Use phonetic TTS text **hey fraya** when generating training clips. Until the file exists, face greetings still work; set `wake_word.model: hey_jarvis` to try wake word immediately.
+
+If `conversation.enabled` is false but `ollama.enabled` is true, the greeter falls back to one-shot Ollama greetings without the mic loop.
 
 Smoke tests:
 
 ```bash
 pi-face-greeter-test-ollama
 pi-face-greeter-test-stt
+pi-face-greeter-test-wake
 ```
 
 ### Debugging / sharing logs
@@ -682,8 +684,9 @@ aplay -l
 speaker-test -D plughw:N,0 -c 2 -t wav   # N = card number of the USB line
 ```
 
-- With `tts.alsa_device: null`, the app picks the USB card automatically.
-- Set `tts.alsa_device` only to override (e.g. `plughw:2,0`).
+- With `tts.alsa_device` / `stt.alsa_device` null, the app picks USB cards automatically (mic avoids the playback card when two USB capture devices exist).
+- Set `tts.alsa_device` or `stt.alsa_device` only to override (e.g. `plughw:2,0`).
+- For mic issues: `arecord -l` and check logs for `Mic stream ALSA: playback=... capture=...`.
 - Confirm speaker wired to sound card header with correct polarity.
 - Check volume: `alsamixer` (select USB card with F6).
 

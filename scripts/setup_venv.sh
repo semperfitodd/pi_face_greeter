@@ -11,7 +11,10 @@ pip install --upgrade pip
 pip install -e .
 pip install -e ".[recognition]"
 pip install -e ".[voice]"
-pip install -e ".[stt]"
+pip install -e ".[stt]" || {
+  pip install onnxruntime scipy tqdm requests
+  pip install --no-deps openwakeword
+}
 
 VOICE_DIR="$PROJECT_ROOT/data/voices"
 PIPER_MODEL_NAME="${PIPER_MODEL_NAME:-en_US-amy-medium}"
@@ -50,6 +53,23 @@ snapshot_download(
 )
 PY
   echo "Whisper model ready in $MODEL_DIR"
+fi
+
+VAD_PATH="$PROJECT_ROOT/data/models/silero_vad.onnx"
+mkdir -p "$PROJECT_ROOT/data/models"
+if [[ -f "$VAD_PATH" ]]; then
+  echo "Silero VAD model already present: $VAD_PATH"
+else
+  echo "Downloading Silero VAD model..."
+  curl -L --fail --show-error \
+    "https://github.com/snakers4/silero-vad/raw/master/src/silero_vad/data/silero_vad.onnx" \
+    -o "$VAD_PATH"
+  echo "Silero VAD ready at $VAD_PATH"
+fi
+
+if [[ ! -f "$PROJECT_ROOT/data/models/hey_freyja.onnx" ]]; then
+  echo "Note: data/models/hey_freyja.onnx is not present yet."
+  echo "Train a custom wake word or set wake_word.model: hey_jarvis in config/config.yaml."
 fi
 
 if command -v ollama >/dev/null 2>&1; then

@@ -108,10 +108,31 @@ def test_request_timeout_error_message() -> None:
             ollama_client._request("http://localhost:11434/api/generate", timeout=8.0)
 
 
+def test_chat_stream_yields_tokens() -> None:
+    payload = (
+        b'{"message":{"content":"Hello"},"done":false}\n'
+        b'{"message":{"content":" there."},"done":true}\n'
+    )
+    response = MagicMock()
+    response.__iter__ = MagicMock(return_value=iter([payload]))
+    response.__enter__ = MagicMock(return_value=response)
+    response.__exit__ = MagicMock(return_value=None)
+
+    with patch("urllib.request.urlopen", return_value=response):
+        tokens = list(
+            ollama_client.chat_stream(
+                [{"role": "user", "content": "Hi"}],
+                base_url="http://localhost:11434",
+                model="llama3.2:1b",
+            )
+        )
+    assert tokens == ["Hello", " there."]
+
+
 def test_chat_returns_assistant_message() -> None:
     with patch(
-        "pi_face_greeter.ollama_client._request",
-        return_value={"message": {"role": "assistant", "content": "I am doing well."}},
+        "pi_face_greeter.ollama_client.chat_stream",
+        return_value=iter(["I am doing well."]),
     ):
         text = ollama_client.chat(
             [{"role": "user", "content": "How are you?"}],
@@ -123,8 +144,8 @@ def test_chat_returns_assistant_message() -> None:
 
 def test_chat_raises_on_empty_content() -> None:
     with patch(
-        "pi_face_greeter.ollama_client._request",
-        return_value={"message": {"role": "assistant", "content": "  "}},
+        "pi_face_greeter.ollama_client.chat_stream",
+        return_value=iter([]),
     ):
         with pytest.raises(RuntimeError, match="empty response"):
             ollama_client.chat(

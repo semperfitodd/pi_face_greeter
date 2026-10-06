@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -13,6 +13,7 @@ from pi_face_greeter.conversation import (
     build_system_prompt,
     conversation_enabled,
     generate_greeting,
+    iter_sentences_from_tokens,
     run_conversation,
     validate_ollama_base_url,
 )
@@ -79,15 +80,21 @@ def test_build_opener_custom_greeting() -> None:
     assert build_opener("Todd", "Welcome home.") == "Welcome home."
 
 
-def test_build_system_prompt_includes_vesper_and_name() -> None:
+def test_build_system_prompt_includes_freyja_and_name() -> None:
     prompt = build_system_prompt(
         "Todd",
-        assistant_cfg={"name": "Vesper"},
+        assistant_cfg={"name": "Freyja"},
         now=datetime(2026, 5, 31, 9, 0, 0),
     )
-    assert "Vesper" in prompt
+    assert "Freyja" in prompt
     assert "Todd" in prompt
     assert "morning" in prompt
+
+
+def test_iter_sentences_from_tokens_splits_on_punctuation() -> None:
+    tokens = iter(["Hello", " Todd", ". ", "How are you", "?"])
+    sentences = list(iter_sentences_from_tokens(tokens))
+    assert sentences == ["Hello Todd.", "How are you?"]
 
 
 def test_conversation_enabled_requires_both_flags() -> None:
@@ -100,32 +107,36 @@ def test_run_conversation_speaks_opener_only_when_disabled() -> None:
         run_conversation(
             "Todd",
             "Hi, Todd. How are you?",
+            mic=None,
             tts_cfg={"enabled": True},
             stt_cfg={"enabled": True},
             ollama_cfg={"enabled": False},
             conversation_cfg={"enabled": True},
-            assistant_cfg={"name": "Vesper"},
+            assistant_cfg={"name": "Freyja"},
         )
     mock_speak.assert_called_once_with("Hi, Todd. How are you?", {"enabled": True})
 
 
 def test_run_conversation_stops_on_empty_transcript() -> None:
+    mic = MagicMock()
     with (
         patch("pi_face_greeter.conversation.speak_from_config") as mock_speak,
         patch("pi_face_greeter.conversation.listen_from_config", return_value=None),
-        patch("pi_face_greeter.ollama_client.chat") as mock_chat,
+        patch("pi_face_greeter.conversation._speak_streamed_reply") as mock_stream,
+        patch("pi_face_greeter.conversation.play_chime"),
     ):
         run_conversation(
             "Todd",
             "Hi, Todd. How are you?",
+            mic=mic,
             tts_cfg={"enabled": True},
             stt_cfg={"enabled": True},
             ollama_cfg={"enabled": True, "base_url": "http://localhost:11434", "model": "x"},
-            conversation_cfg={"enabled": True},
-            assistant_cfg={"name": "Vesper"},
+            conversation_cfg={"enabled": True, "listen_chime": False},
+            assistant_cfg={"name": "Freyja"},
         )
 
-    mock_chat.assert_not_called()
+    mock_stream.assert_not_called()
     assert mock_speak.call_count == 1
 
 

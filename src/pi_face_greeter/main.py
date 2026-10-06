@@ -8,7 +8,9 @@ from typing import Any
 
 from pi_face_greeter.camera import CameraBackend, create_camera
 from pi_face_greeter.config_loader import load_config
+from pi_face_greeter.conversation import conversation_enabled
 from pi_face_greeter.greet_pipeline import speak_greeting
+from pi_face_greeter.mic import MicStream, create_mic_stream
 from pi_face_greeter.logger import setup_logging
 from pi_face_greeter.per_person_cooldown import PerPersonCooldown, cooldown_key
 from pi_face_greeter.pir_sensor import PIRSensor
@@ -35,6 +37,7 @@ def run_greet_cycle(
     stt_cfg: dict[str, Any] | None = None,
     assistant_cfg: dict[str, Any] | None = None,
     cooldown: PerPersonCooldown | None = None,
+    mic: MicStream | None = None,
 ) -> tuple[CameraBackend | None, Path | None, bool]:
     frame_path = None
     active_camera = camera
@@ -77,6 +80,8 @@ def run_greet_cycle(
             conversation_cfg=conversation_cfg,
             stt_cfg=stt_cfg,
             assistant_cfg=assistant_cfg,
+            mic=mic,
+            require_presence=False,
         )
         if cooldown is not None:
             cooldown.mark_triggered(cooldown_key(name))
@@ -129,6 +134,13 @@ def main() -> int:
     cooldown = PerPersonCooldown(greet_cooldown)
     pir = PIRSensor(gpio_pin=pir_cfg.get("gpio_pin", 17))
     camera: CameraBackend | None = None
+    mic: MicStream | None = None
+    if conversation_enabled(conversation_cfg, ollama_cfg):
+        try:
+            mic = create_mic_stream(stt_cfg, tts_cfg)
+            mic.start()
+        except Exception:
+            logger.exception("Failed to start mic stream for PIR loop")
 
     signal.signal(signal.SIGINT, _handle_shutdown)
     signal.signal(signal.SIGTERM, _handle_shutdown)
@@ -160,6 +172,7 @@ def main() -> int:
                     stt_cfg=stt_cfg,
                     assistant_cfg=assistant_cfg,
                     cooldown=cooldown,
+                    mic=mic,
                 )
             except Exception:
                 logger.exception("Greet cycle failed")
@@ -177,6 +190,8 @@ def main() -> int:
     finally:
         if camera is not None:
             camera.close()
+        if mic is not None:
+            mic.stop()
         pir.close()
         logger.info("Shutdown complete")
 

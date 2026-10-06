@@ -47,21 +47,24 @@ One-way spoken greetings via a local SLM on the Pi 5. No microphone or cloud API
 - [x] CLI smoke test (`pi-face-greeter-test-ollama`)
 - [ ] Confirm conversation latency and stability on real Pi 5 hardware
 
-## Milestone 6: Vesper voice conversation
+## Milestone 6: Freyja voice conversation
 
-Local mic + STT + multi-turn chat with **Vesper** (executive assistant persona) on the Pi 5. No cloud API.
+Local mic + STT + multi-turn chat with **Freyja** (executive assistant persona) on the Pi 5. No cloud API.
 
-- [x] USB mic capture (`arecord`) with silence-based end detection
+- [x] Shared `MicStream` (`mic.py`) for wake word + conversation
+- [x] Silero VAD utterance detection (`vad.py`)
 - [x] faster-whisper `tiny.en` STT (`stt.py`, `[stt]` extra)
-- [x] Ollama `/api/chat` for follow-up turns
+- [x] Ollama streaming `/api/chat` with sentence-by-sentence TTS
 - [x] Fixed opener: "Hi, \<name\>. How are you?" then listen
+- [x] Wake word ("Hey Freyja") bypasses greet cooldown
 - [x] Kiosk + optional PIR loop integration; cooldown after conversation ends
-- [x] `assistant` + `conversation` + `stt` config sections
-- [x] CLI smoke test (`pi-face-greeter-test-stt`)
+- [x] `assistant` + `conversation` + `stt` + `wake_word` config sections
+- [x] CLI smoke tests (`pi-face-greeter-test-stt`, `pi-face-greeter-test-wake`)
 - [x] `./scripts/start.sh` — verify install, Ollama, launch kiosk
+- [ ] Train and ship `data/models/hey_freyja.onnx` on real Pi hardware
 - [ ] Confirm latency and stability on real Pi 5 hardware (mic + speaker)
 
-**Out of scope:** wake word, cloud LLMs, always-on listening without a face trigger.
+**Out of scope:** cloud LLMs, always-on listening without face or wake word.
 
 ## Final Step: Motion (PIR) — optional
 

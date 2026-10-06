@@ -147,14 +147,14 @@ def test_parse_usb_playback_device_no_usb() -> None:
 
 
 def test_resolve_playback_device_uses_explicit_override() -> None:
-    with patch("pi_face_greeter.tts.detect_usb_alsa_device") as mock_detect:
+    with patch("pi_face_greeter.alsa_devices.detect_usb_playback_device") as mock_detect:
         assert resolve_playback_device("plughw:9,0") == "plughw:9,0"
     mock_detect.assert_not_called()
 
 
 def test_resolve_playback_device_detects_usb_when_unconfigured() -> None:
     with patch(
-        "pi_face_greeter.tts.detect_usb_alsa_device",
+        "pi_face_greeter.alsa_devices.detect_usb_playback_device",
         return_value="plughw:2,0",
     ):
         assert resolve_playback_device(None) == "plughw:2,0"
