@@ -15,6 +15,7 @@ from pi_face_greeter.app.face_screen import FaceScreen
 from pi_face_greeter.app.settings_screen import SettingsScreen
 from pi_face_greeter.config_loader import load_config
 from pi_face_greeter.recognition import configure as configure_recognizer
+from pi_face_greeter.recognition import get_recognizer
 from pi_face_greeter.recognition import reload as reload_recognizer
 from pi_face_greeter.events import log_event
 from pi_face_greeter.logger import setup_logging
@@ -91,6 +92,12 @@ class PiFaceGreeterApp(App):
         detection_cfg = self.config_data.get("detection", {})
 
         configure_recognizer(self.config_data.get("recognition", {}))
+        recognizer = get_recognizer()
+        if recognizer is not None:
+            log_event(
+                f"faces loaded encodings={len(recognizer.encodings)} "
+                f"people={recognizer.enrolled_people_count}"
+            )
 
         if conversation_enabled(conversation_cfg, ollama_cfg):
             assistant_name = assistant_cfg.get("name", "Freyja")

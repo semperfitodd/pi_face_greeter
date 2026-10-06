@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -13,6 +14,15 @@ from pi_face_greeter.path_security import PathSecurityError, resolve_known_face_
 logger = logging.getLogger("pi_face_greeter.recognizer")
 
 ENCODINGS_FILENAME = "encodings.npy"
+
+
+@dataclass(frozen=True)
+class IdentifyMiss:
+    reason: str
+    encodings_count: int
+    tolerance: float
+    best_name: str | None = None
+    best_distance: float | None = None
 
 
 def _largest_box(boxes: list[FaceBox]) -> FaceBox | None:
@@ -50,6 +60,15 @@ class FaceRecognizer:
         self.names: list[str] = []
         self.encodings: list[np.ndarray] = []
         self._people_by_name: dict[str, dict[str, Any]] = {}
+        self._last_identify_miss: IdentifyMiss | None = None
+
+    @property
+    def last_identify_miss(self) -> IdentifyMiss | None:
+        return self._last_identify_miss
+
+    @property
+    def enrolled_people_count(self) -> int:
+        return len(self._people_by_name)
 
     def load(self, people: list[dict[str, Any]], project_root: Path | None = None) -> None:
         root = project_root or PROJECT_ROOT
@@ -93,28 +112,70 @@ class FaceRecognizer:
             return None
         return self._people_by_name.get(name)
 
+    def _record_miss(self, miss: IdentifyMiss) -> None:
+        self._last_identify_miss = miss
+
     def identify(self, frame: np.ndarray) -> tuple[str | None, float]:
         if not self.encodings:
+            self._record_miss(
+                IdentifyMiss(
+                    reason="no_encodings",
+                    encodings_count=0,
+                    tolerance=self.tolerance,
+                )
+            )
             return None, 0.0
 
         try:
             import face_recognition
         except ImportError:
             logger.warning("face_recognition not installed; cannot identify faces")
+            self._record_miss(
+                IdentifyMiss(
+                    reason="library_missing",
+                    encodings_count=len(self.encodings),
+                    tolerance=self.tolerance,
+                )
+            )
             return None, 0.0
 
         encoding = encode_face(frame)
         if encoding is None:
+            self._record_miss(
+                IdentifyMiss(
+                    reason="no_face_encoding",
+                    encodings_count=len(self.encodings),
+                    tolerance=self.tolerance,
+                )
+            )
             return None, 0.0
 
         distances = face_recognition.face_distance(self.encodings, encoding)
         if len(distances) == 0:
+            self._record_miss(
+                IdentifyMiss(
+                    reason="no_distances",
+                    encodings_count=len(self.encodings),
+                    tolerance=self.tolerance,
+                )
+            )
             return None, 0.0
 
         best_index = int(np.argmin(distances))
         best_distance = float(distances[best_index])
+        best_name = self.names[best_index]
         if best_distance > self.tolerance:
+            self._record_miss(
+                IdentifyMiss(
+                    reason="over_tolerance",
+                    encodings_count=len(self.encodings),
+                    tolerance=self.tolerance,
+                    best_name=best_name,
+                    best_distance=best_distance,
+                )
+            )
             return None, 0.0
 
+        self._last_identify_miss = None
         confidence = max(0.0, 1.0 - best_distance)
-        return self.names[best_index], confidence
+        return best_name, confidence

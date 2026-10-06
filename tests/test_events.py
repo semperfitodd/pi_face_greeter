@@ -10,6 +10,7 @@ from pi_face_greeter.events import (
     log_event,
     truncate_session_text,
 )
+from pi_face_greeter.recognizer import IdentifyMiss
 
 
 def test_truncate_session_text_shortens_long_lines() -> None:
@@ -22,6 +23,14 @@ def test_format_face_helpers() -> None:
     assert format_face_recognized("Todd", 0.82) == "face recognized name=Todd confidence=0.82"
     assert format_face_unknown() == "face unknown"
     assert format_face_cooldown("Todd") == "face recognized name=Todd cooldown=yes"
+    miss = IdentifyMiss(
+        reason="over_tolerance",
+        encodings_count=3,
+        tolerance=0.6,
+        best_name="Todd",
+        best_distance=0.71,
+    )
+    assert "best=Todd distance=0.71" in format_face_unknown(miss)
 
 
 def test_log_event_writes_to_session_file(tmp_path: Path) -> None:

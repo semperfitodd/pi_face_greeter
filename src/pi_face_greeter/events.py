@@ -4,6 +4,8 @@ import logging
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
+from pi_face_greeter.recognizer import IdentifyMiss
+
 SESSION_TEXT_MAX = 200
 
 _session_handler: RotatingFileHandler | None = None
@@ -64,8 +66,31 @@ def format_face_recognized(name: str, confidence: float) -> str:
     return f"face recognized name={name} confidence={confidence:.2f}"
 
 
-def format_face_unknown() -> str:
-    return "face unknown"
+def format_face_unknown(miss: IdentifyMiss | None = None) -> str:
+    if miss is None:
+        return "face unknown"
+    if miss.reason == "no_encodings":
+        return f"face unknown encodings=0 tolerance={miss.tolerance:.2f}"
+    if miss.reason == "no_face_encoding":
+        return (
+            f"face unknown encodings={miss.encodings_count} reason=no face encoding"
+        )
+    if miss.reason == "library_missing":
+        return (
+            f"face unknown encodings={miss.encodings_count} "
+            f"reason=face_recognition not installed"
+        )
+    if (
+        miss.reason == "over_tolerance"
+        and miss.best_name
+        and miss.best_distance is not None
+    ):
+        return (
+            f"face unknown encodings={miss.encodings_count} "
+            f"best={miss.best_name} distance={miss.best_distance:.2f} "
+            f"tolerance={miss.tolerance:.2f}"
+        )
+    return f"face unknown encodings={miss.encodings_count} reason={miss.reason}"
 
 
 def format_face_cooldown(name: str | None) -> str:

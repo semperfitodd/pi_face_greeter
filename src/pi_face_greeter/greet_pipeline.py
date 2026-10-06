@@ -112,9 +112,11 @@ def run_greeting_interaction(
         )
         return greeting if not skip_opener else ""
 
-    if on_before_speak is not None:
-        on_before_speak(greeting)
-    speak_from_config(greeting, tts_cfg)
+    def start_audio() -> None:
+        if on_before_speak is not None:
+            on_before_speak(greeting)
+
+    speak_from_config(greeting, tts_cfg, on_audio_start=start_audio)
     if on_after_speak is not None:
         on_after_speak()
     return greeting

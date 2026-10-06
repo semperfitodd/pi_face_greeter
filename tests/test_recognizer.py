@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 import numpy as np
 import pytest
 
-from pi_face_greeter.recognizer import FaceRecognizer, encode_face
+from pi_face_greeter.recognizer import FaceRecognizer, IdentifyMiss, encode_face
 
 
 @pytest.fixture
@@ -54,6 +54,9 @@ def test_identify_empty_database() -> None:
     recognizer = FaceRecognizer(tolerance=0.6)
     frame = np.zeros((100, 100, 3), dtype=np.uint8)
     assert recognizer.identify(frame) == (None, 0.0)
+    assert recognizer.last_identify_miss == IdentifyMiss(
+        reason="no_encodings", encodings_count=0, tolerance=0.6
+    )
 
 
 def test_identify_returns_best_match(fake_face_recognition, monkeypatch) -> None:
@@ -87,6 +90,11 @@ def test_identify_respects_tolerance(fake_face_recognition, monkeypatch) -> None
 
     frame = np.zeros((100, 100, 3), dtype=np.uint8)
     assert recognizer.identify(frame) == (None, 0.0)
+    miss = recognizer.last_identify_miss
+    assert miss is not None
+    assert miss.reason == "over_tolerance"
+    assert miss.best_name == "Alice"
+    assert miss.best_distance == pytest.approx(np.linalg.norm(np.zeros(128) - recognizer.encodings[0]))
 
 
 def test_load_reads_encodings(tmp_path: Path, monkeypatch) -> None:

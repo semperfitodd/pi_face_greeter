@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import tempfile
 import wave
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -27,7 +28,13 @@ logger = logging.getLogger("pi_face_greeter.tts")
 _voice_cache: dict[str, Any] = {}
 
 
-def speak(text: str, voice: str = "en", alsa_device: str | None = None) -> None:
+def speak(
+    text: str,
+    voice: str = "en",
+    alsa_device: str | None = None,
+    *,
+    on_audio_start: Callable[[], None] | None = None,
+) -> None:
     if not text.strip():
         logger.warning("Empty TTS text, skipping")
         return
@@ -43,6 +50,8 @@ def speak(text: str, voice: str = "en", alsa_device: str | None = None) -> None:
         env["AUDIODEV"] = alsa_device
 
     logger.info("Speaking with espeak-ng")
+    if on_audio_start is not None:
+        on_audio_start()
     subprocess.run(command, check=True, env=env)
 
 
@@ -58,6 +67,8 @@ def speak_piper(
     model_path: str | Path,
     alsa_device: str | None = None,
     length_scale: float = 1.0,
+    *,
+    on_audio_start: Callable[[], None] | None = None,
 ) -> None:
     if not text.strip():
         logger.warning("Empty TTS text, skipping")
@@ -100,6 +111,8 @@ def speak_piper(
         command.append(wav_path)
 
         logger.info("Speaking with Piper")
+        if on_audio_start is not None:
+            on_audio_start()
         subprocess.run(command, check=True)
     finally:
         if wav_path is not None:
@@ -146,7 +159,12 @@ def play_chime(tts_cfg: dict[str, Any]) -> None:
             Path(wav_path).unlink(missing_ok=True)
 
 
-def speak_from_config(text: str, tts_cfg: dict[str, Any]) -> None:
+def speak_from_config(
+    text: str,
+    tts_cfg: dict[str, Any],
+    *,
+    on_audio_start: Callable[[], None] | None = None,
+) -> None:
     if not tts_cfg.get("enabled", True):
         logger.info("TTS disabled in config, skipping speech")
         return
@@ -164,6 +182,7 @@ def speak_from_config(text: str, tts_cfg: dict[str, Any]) -> None:
                 model_path=piper_cfg.get("model", "data/voices/en_US-lessac-high.onnx"),
                 alsa_device=alsa_device,
                 length_scale=float(piper_cfg.get("length_scale", 1.0)),
+                on_audio_start=on_audio_start,
             )
             return
         except Exception:
@@ -171,4 +190,9 @@ def speak_from_config(text: str, tts_cfg: dict[str, Any]) -> None:
             if not tts_cfg.get("fallback_to_espeak", False):
                 raise
 
-    speak(text=text, voice=espeak_voice, alsa_device=alsa_device)
+    speak(
+        text=text,
+        voice=espeak_voice,
+        alsa_device=alsa_device,
+        on_audio_start=on_audio_start,
+    )

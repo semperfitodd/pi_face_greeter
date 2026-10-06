@@ -207,9 +207,11 @@ def _speak_streamed_reply(
             if mic is not None:
                 mic.pause()
             try:
-                if on_before_speak is not None:
-                    on_before_speak(cleaned)
-                speak_from_config(cleaned, tts_cfg)
+                def start_audio() -> None:
+                    if on_before_speak is not None:
+                        on_before_speak(cleaned)
+
+                speak_from_config(cleaned, tts_cfg, on_audio_start=start_audio)
                 log_event(f"speak {assistant_name}: {truncate_session_text(cleaned)}")
             finally:
                 if on_after_speak is not None:
@@ -298,11 +300,13 @@ def run_conversation(
             on_transcript(speaker, text, replace_last)
 
     def speak_line(text: str, *, speaker: str | None = None) -> None:
-        mic.pause()
-        try:
+        def start_audio() -> None:
             if on_before_speak is not None:
                 on_before_speak(text)
-            speak_from_config(text, tts_cfg)
+
+        mic.pause()
+        try:
+            speak_from_config(text, tts_cfg, on_audio_start=start_audio)
         finally:
             if on_after_speak is not None:
                 on_after_speak()

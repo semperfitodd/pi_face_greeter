@@ -35,7 +35,12 @@ from pi_face_greeter.identity_vote import PENDING, IdentityVoter
 from pi_face_greeter.mic import MicStream
 from pi_face_greeter.per_person_cooldown import PerPersonCooldown, cooldown_key
 from pi_face_greeter.presence import should_trigger_greeting
-from pi_face_greeter.recognition import get_person_cooldown, get_person_greeting, identify
+from pi_face_greeter.recognition import (
+    get_person_cooldown,
+    get_person_greeting,
+    get_recognizer,
+    identify,
+)
 
 logger = logging.getLogger("pi_face_greeter.face_screen")
 
@@ -389,7 +394,9 @@ class FaceScreen(Screen):
             log_event(format_face_recognized(name, confidence))
         else:
             logger.info("Unknown face detected; using friend greeting")
-            log_event(format_face_unknown())
+            recognizer = get_recognizer()
+            miss = recognizer.last_identify_miss if recognizer is not None else None
+            log_event(format_face_unknown(miss))
 
         thread = threading.Thread(
             target=self._speak_and_finish,

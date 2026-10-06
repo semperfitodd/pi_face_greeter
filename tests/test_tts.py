@@ -84,7 +84,9 @@ def test_speak_from_config_delegates_to_speak() -> None:
             "Hello",
             {"enabled": True, "engine": "espeak", "voice": "en", "alsa_device": None},
         )
-    mock_speak.assert_called_once_with(text="Hello", voice="en", alsa_device="plughw:2,0")
+    mock_speak.assert_called_once_with(
+        text="Hello", voice="en", alsa_device="plughw:2,0", on_audio_start=None
+    )
 
 
 def test_speak_from_config_uses_piper() -> None:
@@ -110,6 +112,7 @@ def test_speak_from_config_uses_piper() -> None:
         model_path="data/voices/en_US-amy-medium.onnx",
         alsa_device="plughw:1,0",
         length_scale=1.1,
+        on_audio_start=None,
     )
     mock_speak.assert_not_called()
 
@@ -150,7 +153,9 @@ def test_speak_from_config_falls_back_to_espeak_when_enabled() -> None:
             },
         )
 
-    mock_speak.assert_called_once_with(text="Hello", voice="en", alsa_device=None)
+    mock_speak.assert_called_once_with(
+        text="Hello", voice="en", alsa_device=None, on_audio_start=None
+    )
 
 
 def test_parse_usb_playback_device_pi5_layout() -> None:
@@ -235,3 +240,42 @@ def test_speak_piper_synthesizes_and_plays(tmp_path: Path, monkeypatch) -> None:
     aplay_args, _kwargs = mock_run.call_args
     assert aplay_args[0][0:3] == ["aplay", "-q", "-D"]
     assert aplay_args[0][3] == "plughw:1,0"
+
+
+def test_speak_piper_calls_on_audio_start_before_aplay(tmp_path: Path, monkeypatch) -> None:
+    from pi_face_greeter import tts as tts_module
+    from pi_face_greeter.tts import speak_piper
+
+    model_path = tmp_path / "voice.onnx"
+    model_path.write_bytes(b"onnx")
+    mock_voice = MagicMock()
+
+    def fake_synthesize_wav(_text, wav_file, syn_config=None) -> None:
+        wav_file.setnchannels(1)
+        wav_file.setsampwidth(2)
+        wav_file.setframerate(22050)
+        wav_file.writeframes(b"\x00\x00")
+
+    mock_voice.synthesize_wav.side_effect = fake_synthesize_wav
+    mock_piper = MagicMock()
+    mock_piper.PiperVoice.load.return_value = mock_voice
+    mock_piper.SynthesisConfig = lambda **kwargs: kwargs
+    monkeypatch.setitem(sys.modules, "piper", mock_piper)
+    tts_module._voice_cache.clear()
+
+    order: list[str] = []
+
+    def on_start() -> None:
+        order.append("audio_start")
+
+    def fake_run(*_args, **_kwargs) -> None:
+        order.append("aplay")
+
+    with (
+        patch("pi_face_greeter.tts.shutil.which", return_value="/usr/bin/aplay"),
+        patch("pi_face_greeter.tts.subprocess.run", side_effect=fake_run),
+    ):
+        speak_piper("Hi", model_path, on_audio_start=on_start)
+
+    mock_voice.synthesize_wav.assert_called_once()
+    assert order == ["audio_start", "aplay"]
