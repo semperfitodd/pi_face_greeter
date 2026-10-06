@@ -7,7 +7,11 @@ from typing import Any
 
 from urllib.parse import urlparse
 
+from collections.abc import Callable
+
 from pi_face_greeter import ollama_client
+from pi_face_greeter.stt import listen_from_config
+from pi_face_greeter.tts import speak_from_config
 
 logger = logging.getLogger("pi_face_greeter.conversation")
 
@@ -34,6 +38,21 @@ def validate_ollama_base_url(base_url: str) -> str:
     return f"http://{host}:{port}"
 
 MAX_GREETING_CHARS = 280
+MAX_REPLY_CHARS = 400
+
+DEFAULT_ASSISTANT_NAME = "Vesper"
+DEFAULT_SYSTEM_PROMPT = (
+    "You are {assistant_name}, a helpful executive assistant speaking out loud. "
+    "The person with you is {person_label}. It is {time_of_day}. "
+    "Be warm, concise, and useful. Answer in one or two short spoken sentences. "
+    "Do not use emojis, markdown, lists, or quotation marks. "
+    "Do not mention being an AI."
+)
+
+_GOODBYE_PATTERN = re.compile(
+    r"\b(goodbye|bye|see you|talk later|gotta go|have to go)\b",
+    re.IGNORECASE,
+)
 
 
 def _time_of_day(now: datetime) -> str:
@@ -64,6 +83,134 @@ def _build_prompt(name: str | None, time_of_day: str) -> str:
         "Do not use emojis, markdown, bullet points, or quotation marks. "
         "Do not mention being an AI."
     )
+
+
+def build_opener(name: str | None, custom_greeting: str | None = None) -> str:
+    if custom_greeting:
+        return custom_greeting.strip()
+    if name:
+        return f"Hi, {name}. How are you?"
+    return "Hi. How are you?"
+
+
+def build_system_prompt(
+    name: str | None,
+    *,
+    assistant_cfg: dict[str, Any],
+    now: datetime | None = None,
+) -> str:
+    moment = now or datetime.now()
+    assistant_name = str(assistant_cfg.get("name", DEFAULT_ASSISTANT_NAME))
+    template = str(assistant_cfg.get("system_prompt", DEFAULT_SYSTEM_PROMPT))
+    person_label = name if name else "a visitor"
+    return template.format(
+        assistant_name=assistant_name,
+        person_label=person_label,
+        name=person_label,
+        time_of_day=_time_of_day(moment),
+    )
+
+
+def _sanitize_reply(text: str) -> str:
+    cleaned = _sanitize(text)
+    if len(cleaned) > MAX_REPLY_CHARS:
+        cleaned = cleaned[: MAX_REPLY_CHARS - 3].rstrip() + "..."
+    return cleaned
+
+
+def conversation_enabled(
+    conversation_cfg: dict[str, Any],
+    ollama_cfg: dict[str, Any],
+) -> bool:
+    return bool(conversation_cfg.get("enabled", False) and ollama_cfg.get("enabled", False))
+
+
+def _is_goodbye(text: str) -> bool:
+    return bool(_GOODBYE_PATTERN.search(text))
+
+
+def run_conversation(
+    name: str | None,
+    opener: str,
+    *,
+    tts_cfg: dict[str, Any],
+    stt_cfg: dict[str, Any],
+    ollama_cfg: dict[str, Any],
+    conversation_cfg: dict[str, Any],
+    assistant_cfg: dict[str, Any],
+    on_status: Callable[[str], None] | None = None,
+    on_before_speak: Callable[[str], None] | None = None,
+    on_after_speak: Callable[[], None] | None = None,
+    now: datetime | None = None,
+) -> None:
+    if not conversation_enabled(conversation_cfg, ollama_cfg):
+        speak_from_config(opener, tts_cfg)
+        return
+
+    settings = _ollama_settings(ollama_cfg)
+    keep_alive = settings["keep_alive"]
+    if keep_alive is not None:
+        keep_alive = str(keep_alive)
+
+    max_turns = int(conversation_cfg.get("max_turns", 4))
+    max_tokens = int(conversation_cfg.get("max_tokens", ollama_cfg.get("max_tokens", 120)))
+    temperature = float(conversation_cfg.get("temperature", ollama_cfg.get("temperature", 0.7)))
+
+    system_prompt = build_system_prompt(name, assistant_cfg=assistant_cfg, now=now)
+    messages: list[dict[str, str]] = [
+        {"role": "system", "content": system_prompt},
+        {"role": "assistant", "content": opener},
+    ]
+
+    def status(text: str) -> None:
+        if on_status is not None:
+            on_status(text)
+
+    def speak_line(text: str) -> None:
+        if on_before_speak is not None:
+            on_before_speak(text)
+        speak_from_config(text, tts_cfg)
+        if on_after_speak is not None:
+            on_after_speak()
+
+    speak_line(opener)
+
+    for turn in range(max_turns):
+        status("Listening...")
+        user_text = listen_from_config(stt_cfg)
+        if not user_text:
+            logger.info("Conversation ended: no speech (turn %d)", turn + 1)
+            break
+
+        logger.info("User said: %s", user_text[:120])
+        messages.append({"role": "user", "content": user_text})
+
+        if _is_goodbye(user_text):
+            logger.info("Conversation ended: user goodbye")
+            break
+
+        try:
+            raw = ollama_client.chat(
+                messages,
+                base_url=settings["base_url"],
+                model=settings["model"],
+                timeout=settings["timeout"],
+                max_tokens=max_tokens,
+                temperature=temperature,
+                keep_alive=keep_alive,
+            )
+            reply = _sanitize_reply(raw)
+            if not reply:
+                raise RuntimeError("Ollama chat reply empty after sanitization")
+        except Exception:
+            logger.warning("Ollama chat failed on turn %d", turn + 1, exc_info=True)
+            break
+
+        messages.append({"role": "assistant", "content": reply})
+        status(reply)
+        speak_line(reply)
+
+    status("")
 
 
 def _sanitize(text: str) -> str:

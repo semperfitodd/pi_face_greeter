@@ -47,7 +47,21 @@ One-way spoken greetings via a local SLM on the Pi 5. No microphone or cloud API
 - [x] CLI smoke test (`pi-face-greeter-test-ollama`)
 - [ ] Confirm conversation latency and stability on real Pi 5 hardware
 
-**Out of scope for v1:** open-ended multi-turn chat, wake word, STT, or cloud LLMs.
+## Milestone 6: Vesper voice conversation
+
+Local mic + STT + multi-turn chat with **Vesper** (executive assistant persona) on the Pi 5. No cloud API.
+
+- [x] USB mic capture (`arecord`) with silence-based end detection
+- [x] faster-whisper `tiny.en` STT (`stt.py`, `[stt]` extra)
+- [x] Ollama `/api/chat` for follow-up turns
+- [x] Fixed opener: "Hi, \<name\>. How are you?" then listen
+- [x] Kiosk + optional PIR loop integration; cooldown after conversation ends
+- [x] `assistant` + `conversation` + `stt` config sections
+- [x] CLI smoke test (`pi-face-greeter-test-stt`)
+- [x] `./scripts/start.sh` — verify install, Ollama, launch kiosk
+- [ ] Confirm latency and stability on real Pi 5 hardware (mic + speaker)
+
+**Out of scope:** wake word, cloud LLMs, always-on listening without a face trigger.
 
 ## Final Step: Motion (PIR) — optional
 

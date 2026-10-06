@@ -1,6 +1,32 @@
 app:
   name: Pi Face Greeter
 
+assistant:
+  name: Vesper
+  system_prompt: >
+    You are {assistant_name}, a helpful executive assistant speaking out loud.
+    The person with you is {person_label}. It is {time_of_day}.
+    Be warm, concise, and useful. Answer in one or two short spoken sentences.
+    Do not use emojis, markdown, lists, or quotation marks.
+    Do not mention being an AI.
+
+conversation:
+  enabled: false
+  max_turns: 4
+  max_tokens: 120
+  temperature: 0.7
+
+stt:
+  enabled: true
+  alsa_device: null
+  model: data/models/faster-whisper-tiny.en
+  compute_type: int8
+  language: en
+  max_record_seconds: 8
+  silence_seconds: 1.2
+  start_timeout_seconds: 5
+  speech_rms_threshold: 400
+
 ui:
   fullscreen: true
   settings_pin: null

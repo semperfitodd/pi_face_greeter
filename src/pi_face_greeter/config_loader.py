@@ -43,6 +43,10 @@ def _resolve_paths(config: dict[str, Any]) -> None:
     if model_path := piper_cfg.get("model"):
         piper_cfg["model"] = str(_resolve_project_path(model_path))
 
+    stt_cfg = config.get("stt", {})
+    if stt_model := stt_cfg.get("model"):
+        stt_cfg["model"] = str(_resolve_project_path(stt_model))
+
 
 def _resolve_project_path(value: str) -> Path:
     path = Path(value)

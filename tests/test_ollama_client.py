@@ -108,6 +108,32 @@ def test_request_timeout_error_message() -> None:
             ollama_client._request("http://localhost:11434/api/generate", timeout=8.0)
 
 
+def test_chat_returns_assistant_message() -> None:
+    with patch(
+        "pi_face_greeter.ollama_client._request",
+        return_value={"message": {"role": "assistant", "content": "I am doing well."}},
+    ):
+        text = ollama_client.chat(
+            [{"role": "user", "content": "How are you?"}],
+            base_url="http://localhost:11434",
+            model="llama3.2:1b",
+        )
+    assert text == "I am doing well."
+
+
+def test_chat_raises_on_empty_content() -> None:
+    with patch(
+        "pi_face_greeter.ollama_client._request",
+        return_value={"message": {"role": "assistant", "content": "  "}},
+    ):
+        with pytest.raises(RuntimeError, match="empty response"):
+            ollama_client.chat(
+                [{"role": "user", "content": "Hi"}],
+                base_url="http://localhost:11434",
+                model="llama3.2:1b",
+            )
+
+
 def test_request_parses_json_body() -> None:
     payload = json.dumps({"response": "hello"}).encode("utf-8")
     response = MagicMock()

@@ -146,3 +146,35 @@ def test_ollama() -> int:
     print(f"Generated greeting: {greeting}")
     print("Ollama test complete.")
     return 0
+
+
+def test_stt() -> int:
+    from pi_face_greeter.stt import listen_from_config, resolve_capture_device
+
+    config = load_config()
+    setup_logging(level=config.get("logging", {}).get("level", "INFO"))
+
+    stt_cfg = config.get("stt", {})
+    device = resolve_capture_device(stt_cfg.get("alsa_device"))
+
+    print("Speech-to-text test (USB mic)")
+    if device:
+        print(f"Capture device: {device}")
+    else:
+        print("Capture device: system default (no USB card found; run arecord -l)")
+    print("Speak after the prompt. Recording stops after a short pause.\n")
+
+    try:
+        text = listen_from_config(stt_cfg)
+    except Exception as exc:
+        print(f"STT test failed: {exc}", file=sys.stderr)
+        logger.exception("STT test failed")
+        return 1
+
+    if not text:
+        print("No speech detected or transcription was empty.", file=sys.stderr)
+        return 1
+
+    print(f"Transcript: {text}")
+    print("STT test complete.")
+    return 0

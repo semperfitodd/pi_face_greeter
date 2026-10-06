@@ -20,6 +20,8 @@ data/known_faces/**/*
 !data/known_faces/.gitkeep
 data/voices/*
 !data/voices/.gitkeep
+data/models/*
+!data/models/.gitkeep
 
 # Editor / OS
 .DS_Store

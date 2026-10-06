@@ -77,7 +77,8 @@ drawio -x -f png -o architecture/architecture.png architecture/architecture.draw
 | PIR | `src/pi_face_greeter/pir_sensor.py` | gpiozero wrapper for AM312 |
 | Camera | `src/pi_face_greeter/camera.py` | Picamera2 (CSI) backend |
 | TTS | `src/pi_face_greeter/tts.py` | Piper neural TTS (espeak-ng fallback) |
-| Conversation | `src/pi_face_greeter/conversation.py` | Ollama SLM greetings (fallback to canned phrases) |
+| Conversation | `src/pi_face_greeter/conversation.py` | Vesper voice chat + optional one-shot Ollama greetings |
+| Speech-to-text | `src/pi_face_greeter/stt.py` | USB mic capture + faster-whisper |
 | Ollama client | `src/pi_face_greeter/ollama_client.py` | HTTP client for local Ollama |
 | Config | `config/config.yaml` | Runtime settings |
 
@@ -274,11 +275,12 @@ git pull
 ./scripts/setup_system.sh
 # log out and back in after system setup (group membership + Ollama)
 ./scripts/setup_venv.sh
-source .venv/bin/activate
-pi-face-greeter-app
+./scripts/start.sh
 ```
 
-`setup_system.sh` installs apt packages and Ollama. `setup_venv.sh` installs the optional `[recognition]` extra (`face_recognition` + dlib), `[voice]` extra (Piper TTS), downloads the Piper voice model, and pulls the Ollama SLM. The dlib compile can take 30+ minutes on a Pi — run it once and leave the terminal open.
+`setup_system.sh` installs apt packages and Ollama. `setup_venv.sh` installs the optional `[recognition]`, `[voice]`, and `[stt]` extras, downloads Piper and faster-whisper models, and pulls the Ollama SLM. The dlib compile can take 30+ minutes on a Pi — run it once and leave the terminal open.
+
+`start.sh` checks system tools and the venv, starts Ollama if needed, pulls the SLM when missing, and launches the kiosk (`pi-face-greeter-app`). Use it as the day-to-day command on the Pi.
 
 Or update an existing install:
 
@@ -288,6 +290,7 @@ git pull
 source .venv/bin/activate
 pip install -e ".[recognition]"
 pip install -e ".[voice]"
+pip install -e ".[stt]"
 ./scripts/setup_venv.sh
 ```
 
@@ -316,6 +319,7 @@ python3 -m venv --system-site-packages .venv
 source .venv/bin/activate
 pip install -e ".[recognition]"
 pip install -e ".[voice]"
+pip install -e ".[stt]"
 ./scripts/setup_venv.sh
 ```
 
@@ -330,10 +334,12 @@ Log out and back in for group membership. Do **not** pip install `picamera2`, `o
 Primary experience on the Hosyond 5" DSI touchscreen:
 
 ```bash
-pi-face-greeter-app
+./scripts/start.sh
 ```
 
-- **Face screen (default):** Animated face with random blinking eyes and moving mouth during speech. Live camera preview in the upper-left corner; yellow box on detected faces. Greets with varied conversational phrases ("Hey Todd, good to see you. How are you doing today?") when recognized, or a friendly unknown greeting.
+Or, with the venv already active: `pi-face-greeter-app`.
+
+- **Face screen (default):** Animated face with random blinking eyes and moving mouth during speech. Live camera preview in the upper-left corner; yellow box on detected faces. Greets recognized people with **Hi, \<name\>. How are you?** (or a custom `greeting:` from `people.yaml`). With voice conversation enabled, **Vesper** listens and replies through the local Ollama model.
 - **Settings screen:** Swipe left. Add, list, edit, and delete faces. **Add Face** captures photos from the live camera (same `CameraSource` as the face screen), computes face embeddings, and reloads recognition without restarting the app.
 
 On Mac for UI development, set `camera.backend: opencv` in `config/config.yaml` and install dev deps: `pip install -e ".[dev]"`.
@@ -370,15 +376,15 @@ The voice model is downloaded **once per Pi**, not per face or greeting. To swap
 
 Use `tts.engine: espeak` to force the old robotic voice. Toggle `tts.ask_how_are_you: false` to skip the follow-up question.
 
-### Local conversation (Ollama SLM)
+### Vesper voice conversation (mic + Ollama)
 
-When enabled (`ollama.enabled: true`), the greeter asks a local **Ollama** small language model for a short, context-aware spoken greeting (name + time of day) instead of the canned phrases. Output is still spoken through Piper TTS. Shipped config keeps Ollama **off** until you opt in. If Ollama is disabled or unreachable, behavior falls back to canned greetings automatically. `ollama.base_url` must be `http://localhost` or `http://127.0.0.1`.
+**Vesper** is the built-in executive assistant. With `conversation.enabled: true` and `ollama.enabled: true`, the greeter speaks a fixed opener, listens on the USB mic, and runs a short multi-turn chat through local **Ollama** (`/api/chat`). Replies are spoken with Piper. Shipped config keeps both features **off** until you opt in. `ollama.base_url` must be `http://localhost` or `http://127.0.0.1`.
 
 One-time setup (included in `./scripts/setup_system.sh` and `./scripts/setup_venv.sh`):
 
 ```bash
 ./scripts/setup_system.sh   # installs Ollama (log out/in after)
-./scripts/setup_venv.sh     # pulls llama3.2:1b (or OLLAMA_MODEL=...)
+./scripts/setup_venv.sh     # Piper + faster-whisper + llama3.2:1b
 ```
 
 Enable in `config/config.yaml`:
@@ -387,15 +393,28 @@ Enable in `config/config.yaml`:
 ollama:
   enabled: true
   model: llama3.2:1b
-  timeout_seconds: 30        # increase if cold starts still time out on Pi
-  warmup_on_startup: true    # loads model when kiosk starts
-  keep_alive: 10m             # keeps model in RAM while app runs
+  timeout_seconds: 30
+  warmup_on_startup: true
+  keep_alive: 10m
+
+conversation:
+  enabled: true
+  max_turns: 4
+
+assistant:
+  name: Vesper
+
+stt:
+  alsa_device: null   # auto USB capture; override e.g. plughw:3,0 if mic is card 3
 ```
 
-Smoke test:
+If `ollama.enabled` is true but `conversation.enabled` is false, the greeter can still use Ollama for one-shot varied greetings (legacy mode) instead of Vesper’s fixed opener + mic loop.
+
+Smoke tests:
 
 ```bash
 pi-face-greeter-test-ollama
+pi-face-greeter-test-stt
 ```
 
 ### Debugging / sharing logs
@@ -505,7 +524,7 @@ pi-face-greeter
 
 ## Python Setup
 
-Install from [pyproject.toml](pyproject.toml): `pip install -e ".[dev]"` on Mac or `pip install -e ".[recognition,voice]"` on the Pi.
+Install from [pyproject.toml](pyproject.toml): `pip install -e ".[dev]"` on Mac or `pip install -e ".[recognition,voice,stt]"` on the Pi.
 
 **Pi venv must use `--system-site-packages`** so Picamera2, gpiozero, and OpenCV from apt are available.
 

@@ -9,7 +9,11 @@ from pi_face_greeter.conversation import (
     OllamaConfigError,
     _build_prompt,
     _sanitize,
+    build_opener,
+    build_system_prompt,
+    conversation_enabled,
     generate_greeting,
+    run_conversation,
     validate_ollama_base_url,
 )
 
@@ -65,6 +69,64 @@ def test_build_prompt_unknown_visitor() -> None:
     prompt = _build_prompt(None, "evening")
     assert "visitor" in prompt
     assert "evening" in prompt
+
+
+def test_build_opener_known_name() -> None:
+    assert build_opener("Todd", None) == "Hi, Todd. How are you?"
+
+
+def test_build_opener_custom_greeting() -> None:
+    assert build_opener("Todd", "Welcome home.") == "Welcome home."
+
+
+def test_build_system_prompt_includes_vesper_and_name() -> None:
+    prompt = build_system_prompt(
+        "Todd",
+        assistant_cfg={"name": "Vesper"},
+        now=datetime(2026, 5, 31, 9, 0, 0),
+    )
+    assert "Vesper" in prompt
+    assert "Todd" in prompt
+    assert "morning" in prompt
+
+
+def test_conversation_enabled_requires_both_flags() -> None:
+    assert conversation_enabled({"enabled": True}, {"enabled": True}) is True
+    assert conversation_enabled({"enabled": True}, {"enabled": False}) is False
+
+
+def test_run_conversation_speaks_opener_only_when_disabled() -> None:
+    with patch("pi_face_greeter.conversation.speak_from_config") as mock_speak:
+        run_conversation(
+            "Todd",
+            "Hi, Todd. How are you?",
+            tts_cfg={"enabled": True},
+            stt_cfg={"enabled": True},
+            ollama_cfg={"enabled": False},
+            conversation_cfg={"enabled": True},
+            assistant_cfg={"name": "Vesper"},
+        )
+    mock_speak.assert_called_once_with("Hi, Todd. How are you?", {"enabled": True})
+
+
+def test_run_conversation_stops_on_empty_transcript() -> None:
+    with (
+        patch("pi_face_greeter.conversation.speak_from_config") as mock_speak,
+        patch("pi_face_greeter.conversation.listen_from_config", return_value=None),
+        patch("pi_face_greeter.ollama_client.chat") as mock_chat,
+    ):
+        run_conversation(
+            "Todd",
+            "Hi, Todd. How are you?",
+            tts_cfg={"enabled": True},
+            stt_cfg={"enabled": True},
+            ollama_cfg={"enabled": True, "base_url": "http://localhost:11434", "model": "x"},
+            conversation_cfg={"enabled": True},
+            assistant_cfg={"name": "Vesper"},
+        )
+
+    mock_chat.assert_not_called()
+    assert mock_speak.call_count == 1
 
 
 def test_warmup_ollama_skips_when_disabled() -> None:

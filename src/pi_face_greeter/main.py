@@ -31,6 +31,9 @@ def run_greet_cycle(
     camera: CameraBackend | None = None,
     filename_prefix: str = "motion",
     ollama_cfg: dict[str, Any] | None = None,
+    conversation_cfg: dict[str, Any] | None = None,
+    stt_cfg: dict[str, Any] | None = None,
+    assistant_cfg: dict[str, Any] | None = None,
     cooldown: PerPersonCooldown | None = None,
 ) -> tuple[CameraBackend | None, Path | None, bool]:
     frame_path = None
@@ -66,13 +69,17 @@ def run_greet_cycle(
                 remaining = cooldown.seconds_remaining(key)
                 logger.info("Cooldown active for %s (%.0fs remaining), skipping greeting", key, remaining)
                 return active_camera, frame_path, False
-            cooldown.mark_triggered(key)
 
         speak_greeting(
             name,
             tts_cfg=tts_cfg,
             ollama_cfg=ollama,
+            conversation_cfg=conversation_cfg,
+            stt_cfg=stt_cfg,
+            assistant_cfg=assistant_cfg,
         )
+        if cooldown is not None:
+            cooldown.mark_triggered(cooldown_key(name))
         spoke = True
     else:
         logger.info("Camera disabled in config")
@@ -80,6 +87,9 @@ def run_greet_cycle(
             None,
             tts_cfg=tts_cfg,
             ollama_cfg=ollama,
+            conversation_cfg=conversation_cfg,
+            stt_cfg=stt_cfg,
+            assistant_cfg=assistant_cfg,
             camera_disabled=True,
         )
         spoke = True
@@ -104,6 +114,9 @@ def main() -> int:
     camera_cfg = config.get("camera", {})
     tts_cfg = config.get("tts", {})
     ollama_cfg = config.get("ollama", {})
+    conversation_cfg = config.get("conversation", {})
+    stt_cfg = config.get("stt", {})
+    assistant_cfg = config.get("assistant", {})
 
     if not pir_cfg.get("enabled", False):
         logger.error(
@@ -143,6 +156,9 @@ def main() -> int:
                     camera=camera,
                     filename_prefix="motion",
                     ollama_cfg=ollama_cfg,
+                    conversation_cfg=conversation_cfg,
+                    stt_cfg=stt_cfg,
+                    assistant_cfg=assistant_cfg,
                     cooldown=cooldown,
                 )
             except Exception:

@@ -69,12 +69,18 @@ class PiFaceGreeterApp(App):
         camera_cfg = self.config_data.get("camera", {})
         tts_cfg = self.config_data.get("tts", {})
         ollama_cfg = self.config_data.get("ollama", {})
+        conversation_cfg = self.config_data.get("conversation", {})
+        stt_cfg = self.config_data.get("stt", {})
+        assistant_cfg = self.config_data.get("assistant", {})
         enrollment_cfg = self.config_data.get("enrollment", {})
         detection_cfg = self.config_data.get("detection", {})
 
         configure_recognizer(self.config_data.get("recognition", {}))
 
-        if ollama_cfg.get("enabled", False):
+        if conversation_cfg.get("enabled", False) and ollama_cfg.get("enabled", False):
+            assistant_name = assistant_cfg.get("name", "Vesper")
+            logger.info("Voice conversation enabled (assistant: %s)", assistant_name)
+        elif ollama_cfg.get("enabled", False):
             logger.info("Ollama greetings enabled (model: %s)", ollama_cfg.get("model", "llama3.2:1b"))
             threading.Thread(
                 target=warmup_ollama,
@@ -107,6 +113,9 @@ class PiFaceGreeterApp(App):
             tts_cfg=tts_cfg,
             ui_cfg=ui_cfg,
             ollama_cfg=ollama_cfg,
+            conversation_cfg=conversation_cfg,
+            stt_cfg=stt_cfg,
+            assistant_cfg=assistant_cfg,
         )
         settings_screen = SettingsScreen(
             name="settings",

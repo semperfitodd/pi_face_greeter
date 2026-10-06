@@ -103,3 +103,35 @@ def warmup(
         keep_alive=keep_alive,
     )
     logger.info("Ollama model %s ready", model)
+
+
+def chat(
+    messages: list[dict[str, str]],
+    *,
+    base_url: str,
+    model: str,
+    timeout: float = 8.0,
+    max_tokens: int = 120,
+    temperature: float = 0.7,
+    keep_alive: str | None = None,
+) -> str:
+    url = f"{base_url.rstrip('/')}/api/chat"
+    body: dict[str, Any] = {
+        "model": model,
+        "messages": messages,
+        "stream": False,
+        "options": {
+            "num_predict": max_tokens,
+            "temperature": temperature,
+        },
+    }
+    if keep_alive is not None:
+        body["keep_alive"] = keep_alive
+    result = _request(url, method="POST", body=body, timeout=timeout)
+    message = result.get("message")
+    if not isinstance(message, dict):
+        raise RuntimeError("Ollama chat returned unexpected message")
+    content = message.get("content")
+    if not isinstance(content, str) or not content.strip():
+        raise RuntimeError("Ollama chat returned empty response")
+    return content.strip()

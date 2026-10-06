@@ -27,6 +27,9 @@ recognition = [
 voice = [
     "piper-tts>=1.3.0,<2",
 ]
+stt = [
+    "faster-whisper>=1.1,<2",
+]
 
 [project.scripts]
 pi-face-greeter = "pi_face_greeter.main:main"
@@ -38,6 +41,7 @@ pi-face-greeter-test-camera = "pi_face_greeter.cli:test_camera"
 pi-face-greeter-test-tts = "pi_face_greeter.cli:test_tts"
 pi-face-greeter-test-pir = "pi_face_greeter.cli:test_pir"
 pi-face-greeter-test-ollama = "pi_face_greeter.cli:test_ollama"
+pi-face-greeter-test-stt = "pi_face_greeter.cli:test_stt"
 pi-face-greeter-app = "pi_face_greeter.app.main:main"
 
 [tool.setuptools.packages.find]

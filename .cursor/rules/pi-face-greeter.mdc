@@ -8,8 +8,9 @@ globs: "**/*"
 - **Mac dev:** `pip install -e ".[dev]"` then `pytest` (Python >=3.11). No Picamera2/gpiozero hardware tests on Mac.
 - **Pi deploy:** `./scripts/setup_system.sh` then log out/in, then `./scripts/setup_venv.sh`. Venv uses `--system-site-packages`. Apt for picamera2, gpiozero, espeak-ng; Ollama optional for SLM greetings (bound to localhost via setup script).
 - **Primary app:** `pi-face-greeter-app` (kiosk). Optional PIR: `pi-face-greeter` when `pir.enabled: true`.
-- **Domain modules** live under `src/pi_face_greeter/` (`recognizer`, `detector`, `people_store`, `greeting`, `conversation`, `greet_pipeline`, `recognition.py`). **Kivy UI only** under `src/pi_face_greeter/app/`.
-- **Ollama:** opt-in (`ollama.enabled: false` in committed config). `base_url` must be localhost. Greeting generation runs off the UI thread; falls back to canned `build_greeting` when unavailable.
+- **Domain modules** live under `src/pi_face_greeter/` (`recognizer`, `detector`, `people_store`, `greeting`, `conversation`, `stt`, `greet_pipeline`, `recognition.py`). **Kivy UI only** under `src/pi_face_greeter/app/`.
+- **Pi run:** `./scripts/start.sh` (checks deps, Ollama, launches kiosk). One-time: `setup_system.sh` then `setup_venv.sh`.
+- **Ollama:** opt-in (`ollama.enabled: false` in committed config). `base_url` must be localhost. **Vesper voice chat:** `conversation.enabled` + `ollama.enabled`; fixed opener then mic STT + `/api/chat`. Without conversation, optional one-shot Ollama greetings still fall back to `build_greeting`.
 - **Settings PIN:** optional `ui.settings_pin` in config; empty logs a warning and leaves settings unlocked.
 - **Cooldown:** `ui.greet_cooldown_seconds` (+ per-person overrides in `people.yaml`) for kiosk and PIR.
 - **Validators/enrollment:** quiet terminal output; full logs in `data/logs/greeter.log`.

@@ -24,3 +24,5 @@ WantedBy=default.target
 #   systemctl --user start pi-face-greeter
 #
 # Optional PIR loop (headless): use pi-face-greeter instead of pi-face-greeter-app.
+#
+# Manual start (also ensures Ollama is up): ./scripts/start.sh

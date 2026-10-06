@@ -12,13 +12,11 @@ from kivy.uix.screenmanager import Screen
 from pi_face_greeter.app.camera_preview import CameraPreview
 from pi_face_greeter.app.camera_source import CameraSource
 from pi_face_greeter.app.face_widget import AnimatedFace
-from pi_face_greeter.greet_pipeline import resolve_greeting_text
+from pi_face_greeter.greet_pipeline import run_greeting_interaction
 from pi_face_greeter.identity_vote import PENDING, IdentityVoter
 from pi_face_greeter.per_person_cooldown import PerPersonCooldown, cooldown_key
 from pi_face_greeter.presence import should_trigger_greeting
 from pi_face_greeter.recognition import get_person_cooldown, get_person_greeting, identify
-from pi_face_greeter.tts import speak_from_config
-
 logger = logging.getLogger("pi_face_greeter.face_screen")
 
 
@@ -29,6 +27,9 @@ class FaceScreen(Screen):
         tts_cfg: dict[str, Any],
         ui_cfg: dict[str, Any],
         ollama_cfg: dict[str, Any] | None = None,
+        conversation_cfg: dict[str, Any] | None = None,
+        stt_cfg: dict[str, Any] | None = None,
+        assistant_cfg: dict[str, Any] | None = None,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -36,6 +37,10 @@ class FaceScreen(Screen):
         self.tts_cfg = tts_cfg
         self.ui_cfg = ui_cfg
         self._ollama_cfg = ollama_cfg or {}
+        self._conversation_cfg = conversation_cfg or {}
+        self._stt_cfg = stt_cfg or {}
+        self._assistant_cfg = assistant_cfg or {}
+        self._pending_cooldown_key: str | None = None
 
         cooldown_seconds = float(ui_cfg.get("greet_cooldown_seconds", 30))
         self._cooldown = PerPersonCooldown(cooldown_seconds)
@@ -169,7 +174,7 @@ class FaceScreen(Screen):
     def _trigger_greeting(self, name: str | None, confidence: float) -> None:
         self._greeting_in_progress = True
         self._reset_presence_state()
-        self._cooldown.mark_triggered(cooldown_key(name))
+        self._pending_cooldown_key = cooldown_key(name)
 
         if name:
             logger.info("Recognized %s (confidence %.2f)", name, confidence)
@@ -183,29 +188,46 @@ class FaceScreen(Screen):
         )
         thread.start()
 
-    def _on_greeting_ready(self, greeting: str) -> None:
+    def _set_status(self, text: str) -> None:
         if self._status_label is not None:
-            self._status_label.text = greeting
+            self._status_label.text = text
+
+    def _on_before_speak(self, text: str) -> None:
+        Clock.schedule_once(lambda _dt: self._set_status(text), 0)
         if self._animated_face is not None:
-            self._animated_face.start_talking()
+            Clock.schedule_once(lambda _dt: self._animated_face.start_talking(), 0)
+
+    def _on_after_speak(self) -> None:
+        if self._animated_face is not None:
+            Clock.schedule_once(lambda _dt: self._animated_face.stop_talking(), 0)
+
+    def _on_status(self, text: str) -> None:
+        Clock.schedule_once(lambda _dt: self._set_status(text), 0)
 
     def _speak_and_finish(self, name: str | None, custom_greeting: str | None) -> None:
         try:
-            greeting = resolve_greeting_text(
+            greeting = run_greeting_interaction(
                 name,
                 tts_cfg=self.tts_cfg,
                 ollama_cfg=self._ollama_cfg,
+                conversation_cfg=self._conversation_cfg,
+                stt_cfg=self._stt_cfg,
+                assistant_cfg=self._assistant_cfg,
                 custom_greeting=custom_greeting,
+                on_status=self._on_status,
+                on_before_speak=self._on_before_speak,
+                on_after_speak=self._on_after_speak,
             )
-            logger.info("Speaking greeting: %s", greeting)
-            Clock.schedule_once(lambda _dt: self._on_greeting_ready(greeting), 0)
-            speak_from_config(greeting, self.tts_cfg)
+            logger.info("Greeting interaction complete: %s", greeting)
         except Exception:
-            logger.exception("TTS failed")
+            logger.exception("Greeting interaction failed")
         finally:
             Clock.schedule_once(self._finish_greeting, 0)
 
     def _finish_greeting(self, _dt) -> None:
         if self._animated_face is not None:
             self._animated_face.stop_talking()
+        if self._pending_cooldown_key is not None:
+            self._cooldown.mark_triggered(self._pending_cooldown_key)
+            self._pending_cooldown_key = None
         self._greeting_in_progress = False
