@@ -403,6 +403,8 @@ pi-face-greeter-test-wake
 
 ### Debugging / sharing logs
 
+For voice or conversation issues, share **`data/logs/session.log`**: one line per face recognition, spoken line, listen outcome, wake word, and LLM reply. Full technical detail stays in **`data/logs/greeter.log`** (camera frame debug stays at DEBUG and does not appear in the session log).
+
 When face detection is not working, enable diagnostics to capture detailed logs and annotated camera snapshots:
 
 ```bash

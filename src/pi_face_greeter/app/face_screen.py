@@ -23,6 +23,12 @@ from pi_face_greeter.app.transcript_format import (
     format_transcript_markup,
 )
 from pi_face_greeter.conversation import DEFAULT_ASSISTANT_NAME
+from pi_face_greeter.events import (
+    format_face_cooldown,
+    format_face_recognized,
+    format_face_unknown,
+    log_event,
+)
 from pi_face_greeter.wake_word import WakeWordListener, build_wake_hint
 from pi_face_greeter.greet_pipeline import run_greeting_interaction
 from pi_face_greeter.identity_vote import PENDING, IdentityVoter
@@ -98,6 +104,7 @@ class FaceScreen(Screen):
         self._tick_event = None
         self._mic_ui_event = None
         self._wake_listener: WakeWordListener | None = None
+        self._cooldown_session_logged: str | None = None
 
         self._build_ui()
         Clock.schedule_once(self._start_presence_watch, 0)
@@ -138,6 +145,7 @@ class FaceScreen(Screen):
     def _reset_presence_state(self) -> None:
         self._consecutive_face_frames = 0
         self._identity_voter.reset()
+        self._cooldown_session_logged = None
 
     def _is_present(self) -> bool:
         if self._last_face_seen <= 0:
@@ -318,6 +326,9 @@ class FaceScreen(Screen):
             self._cooldown.set_duration(key, person_cooldown)
 
         if not self._cooldown.can_trigger(key):
+            if self._cooldown_session_logged != key:
+                log_event(format_face_cooldown(confirmed))
+                self._cooldown_session_logged = key
             if self._status_label is not None:
                 hint = build_wake_hint(
                     self._wake_cfg,
@@ -375,8 +386,10 @@ class FaceScreen(Screen):
 
         if name:
             logger.info("Recognized %s (confidence %.2f)", name, confidence)
+            log_event(format_face_recognized(name, confidence))
         else:
             logger.info("Unknown face detected; using friend greeting")
+            log_event(format_face_unknown())
 
         thread = threading.Thread(
             target=self._speak_and_finish,

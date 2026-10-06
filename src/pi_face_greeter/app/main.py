@@ -16,6 +16,7 @@ from pi_face_greeter.app.settings_screen import SettingsScreen
 from pi_face_greeter.config_loader import load_config
 from pi_face_greeter.recognition import configure as configure_recognizer
 from pi_face_greeter.recognition import reload as reload_recognizer
+from pi_face_greeter.events import log_event
 from pi_face_greeter.logger import setup_logging
 from pi_face_greeter.settings_auth import warn_if_settings_unlocked
 
@@ -59,6 +60,7 @@ class PiFaceGreeterApp(App):
         setup_logging(
             level=log_level,
             log_file=log_file,
+            session_file=logging_cfg.get("session_file", "data/logs/session.log"),
             capture_loggers=capture_loggers,
             max_bytes=int(logging_cfg.get("max_bytes", 1_000_000)),
             backup_count=int(logging_cfg.get("backup_count", 3)),
@@ -160,6 +162,7 @@ class PiFaceGreeterApp(App):
         carousel.add_widget(settings_screen)
 
         logger.info("Pi Face Greeter kiosk app started")
+        log_event("kiosk started")
         return carousel
 
     def on_stop(self) -> None:
@@ -170,6 +173,7 @@ class PiFaceGreeterApp(App):
         if self.camera_source is not None:
             self.camera_source.stop()
         logger.info("Pi Face Greeter kiosk app stopped")
+        log_event("kiosk stopped")
 
 
 def main() -> int:

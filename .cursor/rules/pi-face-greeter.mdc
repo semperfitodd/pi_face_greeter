@@ -18,4 +18,5 @@ globs: "**/*"
 - **Config:** YAML in `config/`. No hardcoded secrets or machine-specific ALSA paths in commits.
 - **Package:** `pyproject.toml` is canonical (no `requirements.txt`).
 - **Architecture diagram:** `architecture/architecture.drawio`. Regenerate SVG/PNG with drawio CLI when components change.
+- **Session log:** `data/logs/session.log` — paste-friendly recognition, speech, LLM, wake events. `greeter.log` is verbose.
 - Run `pytest` before push.

@@ -10,6 +10,7 @@ from typing import Any
 import numpy as np
 
 from pi_face_greeter.config_loader import PROJECT_ROOT
+from pi_face_greeter.events import log_event
 from pi_face_greeter.mic import MicStream
 
 logger = logging.getLogger("pi_face_greeter.wake_word")
@@ -162,6 +163,7 @@ class WakeWordListener:
             score_f = float(score)
             if score_f >= self._threshold:
                 logger.info("Wake word detected (%s score %.2f)", name, score_f)
+                log_event(f"wake detected {name} score={score_f:.2f}")
                 self._on_wake()
                 return
             if score_f >= half_threshold:

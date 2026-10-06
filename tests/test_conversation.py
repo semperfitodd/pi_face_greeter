@@ -133,15 +133,17 @@ def test_run_conversation_stops_on_empty_transcript() -> None:
 
     mic = MagicMock()
     statuses: list[str] = []
+    session_events: list[str] = []
     with (
         patch("pi_face_greeter.conversation.speak_from_config") as mock_speak,
         patch(
             "pi_face_greeter.conversation.listen_from_config",
-            return_value=ListenOutcome(None, peak_vad=0.08, peak_rms=310.0),
+            return_value=ListenOutcome(None, peak_vad=0.08, peak_rms=310.0, noise_floor=40.0),
         ),
         patch("pi_face_greeter.conversation._speak_streamed_reply") as mock_stream,
         patch("pi_face_greeter.conversation.play_chime"),
         patch("pi_face_greeter.conversation.time.sleep"),
+        patch("pi_face_greeter.conversation.log_event", side_effect=session_events.append),
     ):
         run_conversation(
             "Todd",
@@ -158,6 +160,43 @@ def test_run_conversation_stops_on_empty_transcript() -> None:
     mock_stream.assert_not_called()
     assert mock_speak.call_count == 1
     assert any("Didn't catch that (vad 0.08, level 310)" in s for s in statuses)
+    assert "listen start" in session_events
+    assert any("listen missed" in event and "vad=0.08" in event for event in session_events)
+    assert "conversation ended: no speech" in session_events
+
+
+def test_run_conversation_logs_heard_utterance_to_session() -> None:
+    from pi_face_greeter.stt import ListenOutcome
+
+    mic = MagicMock()
+    session_events: list[str] = []
+    with (
+        patch("pi_face_greeter.conversation.speak_from_config"),
+        patch(
+            "pi_face_greeter.conversation.listen_from_config",
+            return_value=ListenOutcome("I'm good"),
+        ),
+        patch(
+            "pi_face_greeter.conversation._speak_streamed_reply",
+            return_value="Glad to hear it.",
+        ),
+        patch("pi_face_greeter.conversation.play_chime"),
+        patch("pi_face_greeter.conversation.time.sleep"),
+        patch("pi_face_greeter.conversation.log_event", side_effect=session_events.append),
+    ):
+        run_conversation(
+            "Todd",
+            "Hi, Todd. How are you?",
+            mic=mic,
+            tts_cfg={"enabled": True},
+            stt_cfg={"enabled": True},
+            ollama_cfg={"enabled": True, "base_url": "http://localhost:11434", "model": "x"},
+            conversation_cfg={"enabled": True, "listen_chime": False},
+            assistant_cfg={"name": "Freyja"},
+        )
+
+    assert "listen heard: I'm good" in session_events
+    assert any(event.startswith("speak Freyja:") for event in session_events)
 
 
 def test_run_conversation_pauses_mic_for_chime() -> None:

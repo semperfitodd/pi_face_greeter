@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 import urllib.error
 import urllib.request
 from typing import Any
+
+from pi_face_greeter.events import log_event, truncate_session_text
 
 logger = logging.getLogger("pi_face_greeter.ollama_client")
 
@@ -128,6 +131,8 @@ def chat_stream(
     if keep_alive is not None:
         body["keep_alive"] = keep_alive
 
+    log_event(f"llm start model={model}")
+
     data = json.dumps(body).encode("utf-8")
     request = urllib.request.Request(
         url,
@@ -157,12 +162,17 @@ def chat_stream(
                         break
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"Ollama HTTP {exc.code}: {detail}") from exc
+        err = RuntimeError(f"Ollama HTTP {exc.code}: {detail}")
+        log_event(f"llm failed: {truncate_session_text(str(err))}")
+        raise err from exc
     except urllib.error.URLError as exc:
         reason = str(exc.reason)
         if "timed out" in reason.lower():
-            raise RuntimeError(f"Ollama request timed out after {timeout}s") from exc
-        raise RuntimeError(f"Ollama request failed: {reason}") from exc
+            err = RuntimeError(f"Ollama request timed out after {timeout}s")
+        else:
+            err = RuntimeError(f"Ollama request failed: {reason}")
+        log_event(f"llm failed: {truncate_session_text(str(err))}")
+        raise err from exc
 
 
 def chat(
@@ -175,18 +185,26 @@ def chat(
     temperature: float = 0.7,
     keep_alive: str | None = None,
 ) -> str:
-    parts = list(
-        chat_stream(
-            messages,
-            base_url=base_url,
-            model=model,
-            timeout=timeout,
-            max_tokens=max_tokens,
-            temperature=temperature,
-            keep_alive=keep_alive,
+    started = time.monotonic()
+    try:
+        parts = list(
+            chat_stream(
+                messages,
+                base_url=base_url,
+                model=model,
+                timeout=timeout,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                keep_alive=keep_alive,
+            )
         )
-    )
+    except RuntimeError:
+        raise
+    elapsed = time.monotonic() - started
     text = "".join(parts).strip()
     if not text:
-        raise RuntimeError("Ollama chat returned empty response")
+        err = RuntimeError("Ollama chat returned empty response")
+        log_event(f"llm failed: {truncate_session_text(str(err))}")
+        raise err
+    log_event(f"llm reply {elapsed:.1f}s: {truncate_session_text(text)}")
     return text

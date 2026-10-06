@@ -112,5 +112,6 @@ ollama:
 logging:
   level: INFO
   file: data/logs/greeter.log
+  session_file: data/logs/session.log
   max_bytes: 1000000
   backup_count: 3

@@ -4,10 +4,13 @@ import logging
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
+from pi_face_greeter.events import configure_session_log
+
 
 def setup_logging(
     level: str = "INFO",
     log_file: str | Path | None = None,
+    session_file: str | Path | None = None,
     console: bool = True,
     capture_loggers: list[str] | None = None,
     max_bytes: int = 1_000_000,
@@ -45,6 +48,12 @@ def setup_logging(
 
     for handler in handlers:
         logger.addHandler(handler)
+
+    configure_session_log(
+        session_file,
+        max_bytes=max_bytes,
+        backup_count=backup_count,
+    )
 
     if capture_loggers:
         for name in capture_loggers:

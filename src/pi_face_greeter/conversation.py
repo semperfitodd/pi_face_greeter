@@ -11,6 +11,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from pi_face_greeter import ollama_client
+from pi_face_greeter.events import log_event, truncate_session_text
 from pi_face_greeter.mic import MicStream
 from pi_face_greeter.stt import listen_from_config
 from pi_face_greeter.tts import play_chime, speak_from_config
@@ -182,6 +183,7 @@ def _speak_streamed_reply(
     on_before_speak: Callable[[str], None] | None,
     on_after_speak: Callable[[], None] | None,
 ) -> str:
+    llm_started = time.monotonic()
     token_iter = ollama_client.chat_stream(
         messages,
         base_url=settings["base_url"],
@@ -208,6 +210,7 @@ def _speak_streamed_reply(
                 if on_before_speak is not None:
                     on_before_speak(cleaned)
                 speak_from_config(cleaned, tts_cfg)
+                log_event(f"speak {assistant_name}: {truncate_session_text(cleaned)}")
             finally:
                 if on_after_speak is not None:
                     on_after_speak()
@@ -233,6 +236,8 @@ def _speak_streamed_reply(
     full_reply = _sanitize_reply(" ".join(reply_sentences).strip())
     if not full_reply:
         raise RuntimeError("Ollama chat reply empty after sanitization")
+    elapsed = time.monotonic() - llm_started
+    log_event(f"llm reply {elapsed:.1f}s: {truncate_session_text(full_reply)}")
     return full_reply
 
 
@@ -303,6 +308,8 @@ def run_conversation(
                 on_after_speak()
             time.sleep(0.25)
             mic.resume()
+        label = speaker or assistant_name
+        log_event(f"speak {label}: {truncate_session_text(text)}")
         if speaker is not None:
             transcript(speaker, text, replace_last=False)
 
@@ -312,6 +319,7 @@ def run_conversation(
     for turn in range(max_turns):
         if require_presence and is_present is not None and not is_present():
             logger.info("Conversation ended: face not present")
+            log_event("conversation ended: face not present")
             break
 
         if listen_chime:
@@ -321,11 +329,24 @@ def run_conversation(
             finally:
                 time.sleep(0.25)
                 mic.resume()
+        def listen_phase(phase: str) -> None:
+            if phase == "Hearing you...":
+                log_event("listen hearing")
+            status(phase)
+
         status("Listening...")
-        listen_outcome = listen_from_config(mic, stt_cfg, on_phase=status)
+        log_event("listen start")
+        listen_outcome = listen_from_config(mic, stt_cfg, on_phase=listen_phase)
         user_text = listen_outcome.text
         if not user_text:
             logger.info("Conversation ended: no speech (turn %d)", turn + 1)
+            log_event(
+                "listen missed "
+                f"vad={listen_outcome.peak_vad:.2f} "
+                f"level={listen_outcome.peak_rms:.0f} "
+                f"floor={listen_outcome.noise_floor:.0f}"
+            )
+            log_event("conversation ended: no speech")
             status(
                 f"Didn't catch that (vad {listen_outcome.peak_vad:.2f}, "
                 f"level {listen_outcome.peak_rms:.0f})"
@@ -333,12 +354,14 @@ def run_conversation(
             time.sleep(2.0)
             break
 
+        log_event(f"listen heard: {truncate_session_text(user_text)}")
         logger.info("User said: %s", user_text[:120])
         transcript(user_label, user_text, replace_last=False)
         messages.append({"role": "user", "content": user_text})
 
         if _is_goodbye(user_text):
             logger.info("Conversation ended: user goodbye")
+            log_event("conversation ended: user goodbye")
             break
 
         status("Thinking...")
@@ -357,8 +380,9 @@ def run_conversation(
                 on_before_speak=on_before_speak,
                 on_after_speak=on_after_speak,
             )
-        except Exception:
+        except Exception as exc:
             logger.warning("Ollama chat failed on turn %d", turn + 1, exc_info=True)
+            log_event(f"llm failed: {truncate_session_text(str(exc))}")
             break
 
         messages.append({"role": "assistant", "content": reply})

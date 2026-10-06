@@ -108,6 +108,7 @@ def main() -> int:
     setup_logging(
         level=logging_cfg.get("level", "INFO"),
         log_file=logging_cfg.get("file"),
+        session_file=logging_cfg.get("session_file", "data/logs/session.log"),
         max_bytes=int(logging_cfg.get("max_bytes", 1_000_000)),
         backup_count=int(logging_cfg.get("backup_count", 3)),
     )

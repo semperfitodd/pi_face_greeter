@@ -221,9 +221,14 @@ def create_mic_stream(stt_cfg: dict, tts_cfg: dict | None = None) -> MicStream:
         playback_configured=playback_cfg,
         capture_configured=stt_cfg.get("alsa_device"),
     )
+    from pi_face_greeter.events import log_event
+
+    playback_label = playback or "default"
+    capture_label = capture or "default"
     logger.info(
         "Mic stream ALSA: playback=%s capture=%s",
-        playback or "default",
-        capture or "default",
+        playback_label,
+        capture_label,
     )
+    log_event(f"audio playback={playback_label} capture={capture_label}")
     return MicStream(alsa_device=capture)
