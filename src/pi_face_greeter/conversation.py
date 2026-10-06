@@ -43,7 +43,6 @@ MAX_GREETING_CHARS = 280
 MAX_REPLY_CHARS = 400
 
 DEFAULT_ASSISTANT_NAME = "Freyja"
-WAKE_HINT = 'Say "Hey Freyja" to talk'
 DEFAULT_SYSTEM_PROMPT = (
     "You are {assistant_name}, a helpful executive assistant speaking out loud. "
     "The person with you is {person_label}. It is {time_of_day}. "
@@ -323,10 +322,14 @@ def run_conversation(
                 time.sleep(0.25)
                 mic.resume()
         status("Listening...")
-        user_text = listen_from_config(mic, stt_cfg, on_phase=status)
+        listen_outcome = listen_from_config(mic, stt_cfg, on_phase=status)
+        user_text = listen_outcome.text
         if not user_text:
             logger.info("Conversation ended: no speech (turn %d)", turn + 1)
-            status("Didn't catch that")
+            status(
+                f"Didn't catch that (vad {listen_outcome.peak_vad:.2f}, "
+                f"level {listen_outcome.peak_rms:.0f})"
+            )
             time.sleep(2.0)
             break
 

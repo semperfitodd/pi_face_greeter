@@ -20,7 +20,8 @@ conversation:
 
 wake_word:
   enabled: true
-  model: data/models/hey_freyja.onnx
+  model: hey_jarvis
+  phrase: "Hey Jarvis"
   threshold: 0.5
 
 stt:
@@ -28,7 +29,11 @@ stt:
   alsa_device: null
   model: data/models/faster-whisper-tiny.en
   vad_model: data/models/silero_vad.onnx
-  vad_threshold: 0.5
+  vad_threshold: 0.4
+  energy_fallback: true
+  energy_ratio: 3.0
+  min_speech_rms: 200
+  pre_roll_seconds: 0.4
   compute_type: int8
   language: en
   max_record_seconds: 8

@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
+
+import numpy as np
 
 from pi_face_greeter.config_loader import PROJECT_ROOT
 from pi_face_greeter.mic import MicStream
@@ -14,6 +17,17 @@ logger = logging.getLogger("pi_face_greeter.wake_word")
 WakeCallback = Callable[[], None]
 
 _BUILTIN_MODELS = frozenset({"hey_jarvis", "alexa", "hey_mycroft"})
+_OPENWAKEWORD_CHUNK_SAMPLES = 1280
+_DEBUG_SCORE_INTERVAL_SECONDS = 5.0
+
+
+def build_wake_hint(wake_cfg: dict[str, Any], *, listener_enabled: bool) -> str | None:
+    if not wake_cfg.get("enabled", False) or not listener_enabled:
+        return None
+    phrase = str(wake_cfg.get("phrase", "")).strip()
+    if not phrase:
+        return None
+    return f'Say "{phrase}" to talk'
 
 
 def _resolve_model(model: str) -> Path | str | None:
@@ -44,6 +58,8 @@ class WakeWordListener:
         self._enabled = False
         self._active = False
         self._lock = threading.Lock()
+        self._sample_buffer = np.array([], dtype=np.int16)
+        self._last_debug_log = 0.0
 
     @property
     def enabled(self) -> bool:
@@ -58,7 +74,7 @@ class WakeWordListener:
         if model_ref is None:
             logger.warning(
                 "Wake word model not found (%s); wake word disabled. "
-                "Train hey_freyja.onnx or set wake_word.model: hey_jarvis to test.",
+                "Run ./scripts/install.sh or set wake_word.model: hey_jarvis.",
                 self._cfg.get("model"),
             )
             return
@@ -92,6 +108,7 @@ class WakeWordListener:
         if self._enabled:
             self._mic.unsubscribe(self._on_audio)
         self._enabled = False
+        self._sample_buffer = np.array([], dtype=np.int16)
 
     def pause(self) -> None:
         with self._lock:
@@ -106,21 +123,46 @@ class WakeWordListener:
         with self._lock:
             if not self._active or self._model is None:
                 return
-        import numpy as np
 
         samples = np.frombuffer(frame, dtype=np.int16)
         if samples.size == 0:
             return
+
+        self._sample_buffer = np.concatenate([self._sample_buffer, samples])
+        while self._sample_buffer.size >= _OPENWAKEWORD_CHUNK_SAMPLES:
+            chunk = self._sample_buffer[:_OPENWAKEWORD_CHUNK_SAMPLES]
+            self._sample_buffer = self._sample_buffer[_OPENWAKEWORD_CHUNK_SAMPLES:]
+            self._predict_chunk(chunk)
+
+    def _predict_chunk(self, chunk: np.ndarray) -> None:
         try:
-            prediction = self._model.predict(samples)
+            prediction = self._model.predict(chunk)
         except Exception:
             logger.debug("Wake word predict failed", exc_info=True)
             return
 
-        if not isinstance(prediction, dict):
+        if not isinstance(prediction, dict) or not prediction:
             return
-        for _name, score in prediction.items():
-            if float(score) >= self._threshold:
-                logger.info("Wake word detected (score %.2f)", float(score))
+
+        top_name = max(prediction, key=lambda key: float(prediction[key]))
+        top_score = float(prediction[top_name])
+        now = time.monotonic()
+
+        if now - self._last_debug_log >= _DEBUG_SCORE_INTERVAL_SECONDS:
+            logger.debug(
+                "Wake word scores (top %s=%.3f, threshold=%.2f)",
+                top_name,
+                top_score,
+                self._threshold,
+            )
+            self._last_debug_log = now
+
+        half_threshold = self._threshold * 0.5
+        for name, score in prediction.items():
+            score_f = float(score)
+            if score_f >= self._threshold:
+                logger.info("Wake word detected (%s score %.2f)", name, score_f)
                 self._on_wake()
                 return
+            if score_f >= half_threshold:
+                logger.info("Wake word near miss (%s score %.2f)", name, score_f)

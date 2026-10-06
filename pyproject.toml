@@ -44,6 +44,7 @@ pi-face-greeter-test-tts = "pi_face_greeter.cli:test_tts"
 pi-face-greeter-test-pir = "pi_face_greeter.cli:test_pir"
 pi-face-greeter-test-ollama = "pi_face_greeter.cli:test_ollama"
 pi-face-greeter-test-stt = "pi_face_greeter.cli:test_stt"
+pi-face-greeter-test-vad = "pi_face_greeter.cli:test_vad"
 pi-face-greeter-test-wake = "pi_face_greeter.cli:test_wake"
 pi-face-greeter-app = "pi_face_greeter.app.main:main"
 

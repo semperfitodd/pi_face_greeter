@@ -22,14 +22,14 @@ from pi_face_greeter.app.transcript_format import (
     append_or_update_turn,
     format_transcript_markup,
 )
-from pi_face_greeter.conversation import WAKE_HINT, DEFAULT_ASSISTANT_NAME
+from pi_face_greeter.conversation import DEFAULT_ASSISTANT_NAME
+from pi_face_greeter.wake_word import WakeWordListener, build_wake_hint
 from pi_face_greeter.greet_pipeline import run_greeting_interaction
 from pi_face_greeter.identity_vote import PENDING, IdentityVoter
 from pi_face_greeter.mic import MicStream
 from pi_face_greeter.per_person_cooldown import PerPersonCooldown, cooldown_key
 from pi_face_greeter.presence import should_trigger_greeting
 from pi_face_greeter.recognition import get_person_cooldown, get_person_greeting, identify
-from pi_face_greeter.wake_word import WakeWordListener
 
 logger = logging.getLogger("pi_face_greeter.face_screen")
 
@@ -72,6 +72,7 @@ class FaceScreen(Screen):
         self._stt_cfg = stt_cfg or {}
         self._assistant_cfg = assistant_cfg or {}
         self._assistant_name = str(assistant_cfg.get("name", DEFAULT_ASSISTANT_NAME) if assistant_cfg else DEFAULT_ASSISTANT_NAME)
+        self._wake_cfg = wake_cfg or {}
         self._mic = mic
         self._pending_cooldown_key: str | None = None
         self._last_face_seen = 0.0
@@ -318,7 +319,12 @@ class FaceScreen(Screen):
 
         if not self._cooldown.can_trigger(key):
             if self._status_label is not None:
-                self._status_label.text = WAKE_HINT
+                hint = build_wake_hint(
+                    self._wake_cfg,
+                    listener_enabled=self._wake_listener is not None
+                    and self._wake_listener.enabled,
+                )
+                self._status_label.text = hint or ""
             return
 
         self._trigger_greeting(confirmed, confidence)

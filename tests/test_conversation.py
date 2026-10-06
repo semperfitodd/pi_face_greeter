@@ -129,11 +129,16 @@ def test_run_conversation_speaks_opener_only_when_disabled() -> None:
 
 
 def test_run_conversation_stops_on_empty_transcript() -> None:
+    from pi_face_greeter.stt import ListenOutcome
+
     mic = MagicMock()
     statuses: list[str] = []
     with (
         patch("pi_face_greeter.conversation.speak_from_config") as mock_speak,
-        patch("pi_face_greeter.conversation.listen_from_config", return_value=None),
+        patch(
+            "pi_face_greeter.conversation.listen_from_config",
+            return_value=ListenOutcome(None, peak_vad=0.08, peak_rms=310.0),
+        ),
         patch("pi_face_greeter.conversation._speak_streamed_reply") as mock_stream,
         patch("pi_face_greeter.conversation.play_chime"),
         patch("pi_face_greeter.conversation.time.sleep"),
@@ -152,14 +157,17 @@ def test_run_conversation_stops_on_empty_transcript() -> None:
 
     mock_stream.assert_not_called()
     assert mock_speak.call_count == 1
-    assert "Didn't catch that" in statuses
+    assert any("Didn't catch that (vad 0.08, level 310)" in s for s in statuses)
 
 
 def test_run_conversation_pauses_mic_for_chime() -> None:
     mic = MagicMock()
     with (
         patch("pi_face_greeter.conversation.speak_from_config"),
-        patch("pi_face_greeter.conversation.listen_from_config", return_value=None),
+        patch(
+            "pi_face_greeter.conversation.listen_from_config",
+            return_value=__import__("pi_face_greeter.stt", fromlist=["ListenOutcome"]).ListenOutcome(),
+        ),
         patch("pi_face_greeter.conversation.play_chime"),
         patch("pi_face_greeter.conversation.time.sleep"),
     ):
@@ -183,7 +191,12 @@ def test_run_conversation_emits_transcript_for_user_and_assistant() -> None:
     transcript: list[tuple[str, str, bool]] = []
     with (
         patch("pi_face_greeter.conversation.speak_from_config"),
-        patch("pi_face_greeter.conversation.listen_from_config", return_value="I'm good"),
+        patch(
+            "pi_face_greeter.conversation.listen_from_config",
+            return_value=__import__("pi_face_greeter.stt", fromlist=["ListenOutcome"]).ListenOutcome(
+                "I'm good"
+            ),
+        ),
         patch(
             "pi_face_greeter.conversation._speak_streamed_reply",
             return_value="Glad to hear it.",

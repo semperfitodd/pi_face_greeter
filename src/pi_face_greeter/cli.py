@@ -121,8 +121,7 @@ def test_ollama() -> int:
 
     if not health_check(base_url, timeout=min(timeout, 3.0)):
         print(
-            "Ollama is not reachable. Install with ./scripts/setup_system.sh, "
-            "pull the model with ./scripts/setup_venv.sh, and ensure the service is running.",
+            "Ollama is not reachable. Run ./scripts/install.sh and ensure the service is running.",
             file=sys.stderr,
         )
         return 1
@@ -177,7 +176,7 @@ def test_stt() -> int:
     mic = create_mic_stream(stt_cfg, tts_cfg)
     try:
         mic.start()
-        text = listen_from_config(mic, stt_cfg)
+        outcome = listen_from_config(mic, stt_cfg)
     except Exception as exc:
         print(f"STT test failed: {exc}", file=sys.stderr)
         logger.exception("STT test failed")
@@ -185,12 +184,51 @@ def test_stt() -> int:
     finally:
         mic.stop()
 
-    if not text:
-        print("No speech detected or transcription was empty.", file=sys.stderr)
+    if not outcome.text:
+        print(
+            f"No speech detected (vad {outcome.peak_vad:.2f}, level {outcome.peak_rms:.0f}).",
+            file=sys.stderr,
+        )
         return 1
 
-    print(f"Transcript: {text}")
+    print(f"Transcript: {outcome.text}")
     print("STT test complete.")
+    return 0
+
+
+def test_vad() -> int:
+    from pi_face_greeter.mic import create_mic_stream
+    from pi_face_greeter.alsa_devices import resolve_audio_devices
+    from pi_face_greeter.stt import run_vad_probe
+
+    config = load_config()
+    setup_logging(level=config.get("logging", {}).get("level", "INFO"))
+
+    stt_cfg = config.get("stt", {})
+    tts_cfg = config.get("tts", {})
+    _playback, device = resolve_audio_devices(
+        playback_configured=tts_cfg.get("alsa_device"),
+        capture_configured=stt_cfg.get("alsa_device"),
+    )
+
+    print("Live VAD probe (10 seconds). Talk normally and watch rms/vad/speech.\n")
+    if device:
+        print(f"Capture device: {device}")
+    else:
+        print("Capture device: system default (no USB card found; run arecord -l)")
+
+    mic = create_mic_stream(stt_cfg, tts_cfg)
+    try:
+        mic.start()
+        run_vad_probe(mic, stt_cfg, duration_seconds=10.0, print_interval_seconds=0.25)
+    except Exception as exc:
+        print(f"VAD test failed: {exc}", file=sys.stderr)
+        logger.exception("VAD test failed")
+        return 1
+    finally:
+        mic.stop()
+
+    print("VAD test complete.")
     return 0
 
 

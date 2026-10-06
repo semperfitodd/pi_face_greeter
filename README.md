@@ -79,7 +79,7 @@ drawio -x -f png -o architecture/architecture.png architecture/architecture.draw
 | TTS | `src/pi_face_greeter/tts.py` | Piper neural TTS (espeak-ng fallback) |
 | Conversation | `src/pi_face_greeter/conversation.py` | Freyja voice chat + optional one-shot Ollama greetings |
 | Mic / VAD | `src/pi_face_greeter/mic.py`, `vad.py` | Shared USB mic stream + Silero speech detection |
-| Wake word | `src/pi_face_greeter/wake_word.py` | openWakeWord listener ("Hey Freyja") |
+| Wake word | `src/pi_face_greeter/wake_word.py` | openWakeWord listener (default **Hey Jarvis**) |
 | Speech-to-text | `src/pi_face_greeter/stt.py` | USB mic capture + faster-whisper |
 | Ollama client | `src/pi_face_greeter/ollama_client.py` | HTTP client for local Ollama |
 | Config | `config/config.yaml` | Runtime settings |
@@ -279,65 +279,30 @@ Hardware tests (camera, TTS, PIR) run on the Pi only. Push after `pytest` passes
 
 ## Deploy to Raspberry Pi
 
-Quick setup from the project root on the Pi:
+**One-time install** (blank Pi or new checkout). The terminal shows one line per step; details go to `data/logs/install.log`. The Python package step can take 30+ minutes on a Pi (dlib compile).
+
+From a repo you already cloned:
 
 ```bash
 cd ~/pi_face_greeter
-git pull
-./scripts/setup_system.sh
-# log out and back in after system setup (group membership + Ollama)
-./scripts/setup_venv.sh
+./scripts/install.sh
+# log out and back in once (video/gpio groups)
 ./scripts/start.sh
 ```
 
-`setup_system.sh` installs apt packages and Ollama. `setup_venv.sh` installs the optional `[recognition]`, `[voice]`, and `[stt]` extras, downloads Piper and faster-whisper models, and pulls the Ollama SLM. The dlib compile can take 30+ minutes on a Pi — run it once and leave the terminal open.
-
-`start.sh` checks system tools and the venv, starts Ollama if needed, pulls the SLM when missing, and launches the kiosk (`pi-face-greeter-app`). Use it as the day-to-day command on the Pi.
-
-Or update an existing install:
+Or pipe the installer (script must be reachable on GitHub; clone still needs SSH key or GitHub login for a private repo):
 
 ```bash
-cd ~/pi_face_greeter
-git pull
-source .venv/bin/activate
-pip install -e ".[recognition]"
-pip install -e ".[voice]"
-pip install -e ".[stt]"
-./scripts/setup_venv.sh
+curl -fsSL https://raw.githubusercontent.com/semperfitodd/pi_face_greeter/main/scripts/install.sh | bash
 ```
 
-Install system packages manually (once on the Pi):
+Default install directory is `~/pi_face_greeter`. Override with `INSTALL_DIR=/path/to/dir`.
 
-```bash
-sudo apt update
-sudo apt install -y \
-  python3-picamera2 python3-libcamera rpicam-apps \
-  python3-gpiozero python3-lgpio \
-  python3-opencv \
-  libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev \
-  pkg-config libmtdev-dev xinput xfonts-base xfonts-scalable \
-  espeak-ng alsa-utils v4l-utils \
-  cmake build-essential libopenblas-dev liblapack-dev libjpeg-dev libsndfile1
+**Day to day:** `./scripts/start.sh` only — it checks tools, models, and Ollama, then launches the kiosk. It does not run `apt` or `pip`. If something is missing, re-run `./scripts/install.sh`.
 
-sudo usermod -aG video,gpio $USER
-```
+After `git pull`, run `./scripts/install.sh` again to refresh Python deps and models.
 
-Or run `./scripts/setup_system.sh` to install the packages and Ollama automatically.
-
-Create the venv on the Pi with system site packages so apt libraries are visible:
-
-```bash
-python3 -m venv --system-site-packages .venv
-source .venv/bin/activate
-pip install -e ".[recognition]"
-pip install -e ".[voice]"
-pip install -e ".[stt]"
-./scripts/setup_venv.sh
-```
-
-Or run `./scripts/setup_venv.sh` to create the venv and install the package.
-
-Log out and back in for group membership. Do **not** pip install `picamera2`, `opencv-python`, or `RPi.GPIO`.
+Do **not** pip install `picamera2`, `opencv-python`, or `RPi.GPIO` (use apt packages via the installer).
 
 ---
 
@@ -377,11 +342,11 @@ people:
 
 The kiosk uses **Piper** neural TTS by default (`tts.engine: piper`) with **`en_US-lessac-high`** (natural US female). Set `tts.fallback_to_espeak: true` only if you want espeak-ng when Piper fails; the default is `false` so a missing model surfaces as an error instead of a robotic voice.
 
-One-time setup on the Pi (included in `./scripts/setup_venv.sh`):
+One-time setup on the Pi (included in `./scripts/install.sh`):
 
 ```bash
 pip install -e ".[voice]"
-./scripts/setup_venv.sh   # downloads ~63MB Piper model to data/voices/
+./scripts/install.sh      # downloads ~63MB Piper model to data/voices/
 ```
 
 The voice model is downloaded **once per Pi**, not per face or greeting. To swap voices, change `tts.piper.model` and download a different `.onnx` from [rhasspy/piper-voices](https://huggingface.co/rhasspy/piper-voices).
@@ -392,12 +357,7 @@ Use `tts.engine: espeak` to force the old robotic voice. Toggle `tts.ask_how_are
 
 **Freyja** is the built-in executive assistant. The default config enables conversation: face recognized → **Hi, {name}. How are you?** → listen → local **Ollama** reply (streamed, spoken in batched chunks) → listen again. The kiosk right panel shows a **smaller square camera preview**, a **mic row** (ALSA device + live level bar), status (**Listening…** → **Hearing you…** → **Transcribing…** → **Thinking…**), and a scrollable transcript (`Todd: …`, `Freyja: …`). If nothing is heard, the status shows **Didn't catch that** briefly. Cooldown only blocks repeating the face greeting; say **Hey Freyja** anytime to talk. `ollama.base_url` must be `http://localhost` or `http://127.0.0.1`.
 
-One-time setup (included in `./scripts/setup_system.sh` and `./scripts/setup_venv.sh`):
-
-```bash
-./scripts/setup_system.sh   # installs Ollama (log out/in after)
-./scripts/setup_venv.sh     # Piper + faster-whisper + Silero VAD + llama3.2:1b
-```
+One-time setup (included in `./scripts/install.sh`): apt packages, Ollama, Piper, faster-whisper, Silero VAD, openWakeWord, and `llama3.2:1b`.
 
 Key settings in `config/config.yaml`:
 
@@ -411,19 +371,24 @@ assistant:
   name: Freyja
 wake_word:
   enabled: true
-  model: data/models/hey_freyja.onnx   # or hey_jarvis to test before training
+  model: hey_jarvis
+  phrase: "Hey Jarvis"
 stt:
   alsa_device: null   # override only if auto-detect picks the wrong dongle
-  vad_threshold: 0.5
+  vad_threshold: 0.4
+  energy_fallback: true
+  energy_ratio: 3.0
+  min_speech_rms: 200
+  pre_roll_seconds: 0.4
 tts:
   fallback_to_espeak: false
   piper:
     model: data/voices/en_US-lessac-high.onnx
 ```
 
-If the mic seems dead after **Listening…**, watch the **mic level bar** on the kiosk (red **Mic: no audio** = no frames from `arecord`). Check `data/logs/greeter.log` for `USB capture candidates`, `Mic stream ALSA`, and `No speech within start timeout: frames=… peak_vad=… peak_rms=…` (low `peak_rms` → wrong device or gain; low `peak_vad` with healthy RMS → try lowering `vad_threshold`).
+If the mic seems dead after **Listening…**, watch the **mic level bar** on the kiosk (red **Mic: no audio** = no frames from `arecord`). On timeout the status shows **Didn't catch that (vad X, level Y)**. Check `data/logs/greeter.log` for `USB capture candidates`, `Mic stream ALSA`, and `No speech within start timeout: …` (low `peak_rms` → wrong device or gain; low `peak_vad` with healthy RMS → lower `vad_threshold` or raise `min_speech_rms` / tune with `pi-face-greeter-test-vad`).
 
-**Custom wake word:** Train `hey_freyja.onnx` with the [openWakeWord training notebook](https://github.com/dscripka/openWakeWord). Use phonetic TTS text **hey fraya** when generating training clips. Until the file exists, face greetings still work; set `wake_word.model: hey_jarvis` to try wake word immediately.
+**Wake word:** Shipped config uses built-in **Hey Jarvis** (`./scripts/install.sh` downloads openWakeWord models). **Custom "Hey Freyja":** train `hey_freyja.onnx` with the [openWakeWord training notebook](https://github.com/dscripka/openWakeWord) (phonetic TTS **hey fraya** for clips) and set `wake_word.model` + `wake_word.phrase` accordingly.
 
 If `conversation.enabled` is false but `ollama.enabled` is true, the greeter falls back to one-shot Ollama greetings without the mic loop.
 
@@ -432,6 +397,7 @@ Smoke tests:
 ```bash
 pi-face-greeter-test-ollama
 pi-face-greeter-test-stt
+pi-face-greeter-test-vad
 pi-face-greeter-test-wake
 ```
 

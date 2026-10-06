@@ -38,8 +38,8 @@
 
 One-way spoken greetings via a local SLM on the Pi 5. No microphone or cloud API.
 
-- [x] Install Ollama on Raspberry Pi 5 (`scripts/setup_system.sh`)
-- [x] Pull a Pi-friendly SLM via `scripts/setup_venv.sh` (default `llama3.2:1b`)
+- [x] One-shot Pi install (`scripts/install.sh`; uses `setup_system.sh` / `setup_venv.sh`)
+- [x] Pull a Pi-friendly SLM during install (default `llama3.2:1b`)
 - [x] Add `ollama` config section (`enabled`, `base_url`, `model`, `timeout_seconds`, `max_tokens`)
 - [x] Ollama client module (HTTP to `localhost:11434`; health check; graceful fallback)
 - [x] Context-aware prompts: known name, time of day — short replies (1–2 sentences)
@@ -56,7 +56,7 @@ Local mic + STT + multi-turn chat with **Freyja** (executive assistant persona) 
 - [x] faster-whisper `tiny.en` STT (`stt.py`, `[stt]` extra)
 - [x] Ollama streaming `/api/chat` with sentence-by-sentence TTS
 - [x] Fixed opener: "Hi, \<name\>. How are you?" then listen
-- [x] Wake word ("Hey Freyja") bypasses greet cooldown
+- [x] Wake word (default **Hey Jarvis**; custom Freyja model optional) bypasses greet cooldown
 - [x] Kiosk + optional PIR loop integration; cooldown after conversation ends
 - [x] `assistant` + `conversation` + `stt` + `wake_word` config sections
 - [x] CLI smoke tests (`pi-face-greeter-test-stt`, `pi-face-greeter-test-wake`)
