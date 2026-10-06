@@ -3,6 +3,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 from pi_face_greeter.greet_pipeline import run_greeting_interaction
+from pi_face_greeter.person_memory import PersonMemory
 
 
 def test_run_greeting_interaction_speaks_when_conversation_disabled() -> None:
@@ -26,6 +27,10 @@ def test_run_greeting_interaction_uses_conversation_when_enabled() -> None:
     with (
         patch("pi_face_greeter.greet_pipeline.run_conversation") as mock_conversation,
         patch("pi_face_greeter.greet_pipeline.speak_from_config") as mock_speak,
+        patch(
+            "pi_face_greeter.greet_pipeline.load_person_memory",
+            return_value=PersonMemory(),
+        ),
     ):
         result = run_greeting_interaction(
             "Todd",

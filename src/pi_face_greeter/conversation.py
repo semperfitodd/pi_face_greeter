@@ -13,6 +13,13 @@ from urllib.parse import urlparse
 from pi_face_greeter import ollama_client
 from pi_face_greeter.events import log_event, truncate_session_text
 from pi_face_greeter.mic import MicStream
+from pi_face_greeter.person_memory import (
+    PersonMemory,
+    build_memory_system_extras,
+    extract_facts_from_utterance,
+    load_person_memory,
+    save_person_memory,
+)
 from pi_face_greeter.stt import listen_from_config
 from pi_face_greeter.tts import play_chime, speak_from_config
 
@@ -88,10 +95,19 @@ def _build_prompt(name: str | None, time_of_day: str) -> str:
     )
 
 
-def build_opener(name: str | None, custom_greeting: str | None = None) -> str:
+def build_opener(
+    name: str | None,
+    custom_greeting: str | None = None,
+    *,
+    memory: PersonMemory | None = None,
+    now: datetime | None = None,
+) -> str:
     if custom_greeting:
         return custom_greeting.strip()
+    moment = now or datetime.now()
     if name:
+        if memory is not None and memory.already_greeted_today(moment.date()):
+            return f"Hi, {name}."
         return f"Hi, {name}. How are you?"
     return "Hi. How are you?"
 
@@ -101,17 +117,22 @@ def build_system_prompt(
     *,
     assistant_cfg: dict[str, Any],
     now: datetime | None = None,
+    memory: PersonMemory | None = None,
+    curiosity_topic: str | None = None,
 ) -> str:
     moment = now or datetime.now()
     assistant_name = str(assistant_cfg.get("name", DEFAULT_ASSISTANT_NAME))
     template = str(assistant_cfg.get("system_prompt", DEFAULT_SYSTEM_PROMPT))
     person_label = name if name else "a visitor"
-    return template.format(
+    prompt = template.format(
         assistant_name=assistant_name,
         person_label=person_label,
         name=person_label,
         time_of_day=_time_of_day(moment),
     )
+    if name and memory is not None:
+        prompt = f"{prompt}\n\n{build_memory_system_extras(name, memory, curiosity_topic=curiosity_topic)}"
+    return prompt
 
 
 def _sanitize_reply(text: str) -> str:
@@ -285,8 +306,16 @@ def run_conversation(
 
     assistant_name = str(assistant_cfg.get("name", DEFAULT_ASSISTANT_NAME))
     user_label = name if name else "Guest"
+    moment = now or datetime.now()
+    curiosity_asked_this_session = False
 
-    system_prompt = build_system_prompt(name, assistant_cfg=assistant_cfg, now=now)
+    initial_memory = load_person_memory(name) if name else None
+    system_prompt = build_system_prompt(
+        name,
+        assistant_cfg=assistant_cfg,
+        now=moment,
+        memory=initial_memory,
+    )
     messages: list[dict[str, str]] = [{"role": "system", "content": system_prompt}]
     if not skip_opener and opener:
         messages.append({"role": "assistant", "content": opener})
@@ -318,6 +347,10 @@ def run_conversation(
             transcript(speaker, text, replace_last=False)
 
     if not skip_opener and opener:
+        if name and "How are you?" in opener:
+            greeted_memory = load_person_memory(name)
+            greeted_memory.mark_greeted_today(moment.date())
+            save_person_memory(name, greeted_memory)
         speak_line(opener, speaker=assistant_name)
 
     for turn in range(max_turns):
@@ -367,6 +400,37 @@ def run_conversation(
             logger.info("Conversation ended: user goodbye")
             log_event("conversation ended: user goodbye")
             break
+
+        curiosity_topic: str | None = None
+        reply_memory = initial_memory
+        if name:
+            extract_facts_from_utterance(
+                name,
+                user_text,
+                base_url=settings["base_url"],
+                model=settings["model"],
+                timeout=settings["timeout"],
+            )
+            reply_memory = load_person_memory(name)
+            if (
+                not curiosity_asked_this_session
+                and reply_memory.can_ask_curiosity_today(moment.date())
+            ):
+                curiosity_topic = reply_memory.first_missing_topic()
+                if curiosity_topic:
+                    reply_memory.mark_asked_today(moment.date())
+                    save_person_memory(name, reply_memory)
+                    curiosity_asked_this_session = True
+            messages[0] = {
+                "role": "system",
+                "content": build_system_prompt(
+                    name,
+                    assistant_cfg=assistant_cfg,
+                    now=moment,
+                    memory=reply_memory,
+                    curiosity_topic=curiosity_topic,
+                ),
+            }
 
         status("Thinking...")
         try:

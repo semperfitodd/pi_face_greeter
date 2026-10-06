@@ -22,6 +22,8 @@ data/voices/*
 !data/voices/.gitkeep
 data/models/*
 !data/models/.gitkeep
+data/people_memory/*
+!data/people_memory/.gitkeep
 
 # Editor / OS
 .DS_Store

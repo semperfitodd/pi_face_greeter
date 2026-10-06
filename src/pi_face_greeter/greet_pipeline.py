@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from datetime import datetime
 from typing import Any
 
 from pi_face_greeter.conversation import (
@@ -11,6 +12,7 @@ from pi_face_greeter.conversation import (
 )
 from pi_face_greeter.mic import MicStream
 from pi_face_greeter.greeting import build_greeting
+from pi_face_greeter.person_memory import load_person_memory
 from pi_face_greeter.recognition import get_person_greeting
 from pi_face_greeter.tts import speak_from_config
 
@@ -38,7 +40,8 @@ def resolve_greeting_text(
             )
         if custom_greeting is None and name:
             custom_greeting = get_person_greeting(name)
-        return build_opener(name, custom_greeting)
+        memory = load_person_memory(name) if name else None
+        return build_opener(name, custom_greeting, memory=memory, now=datetime.now())
 
     if camera_disabled:
         fallback = tts_cfg.get(

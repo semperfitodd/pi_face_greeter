@@ -338,6 +338,8 @@ people:
     cooldown_seconds: 120
 ```
 
+Conversation memory (not in git) lives under `data/people_memory/{slug}.yaml`: short facts the assistant learned (work, home, likes, family), plus `last_greeted_on` so **How are you?** is only on the first greet of each local day. Unknown faces do not get a memory file.
+
 ### Natural voice (Piper)
 
 The kiosk uses **Piper** neural TTS by default (`tts.engine: piper`) with **`en_US-lessac-high`** (natural US female). Set `tts.fallback_to_espeak: true` only if you want espeak-ng when Piper fails; the default is `false` so a missing model surfaces as an error instead of a robotic voice.
