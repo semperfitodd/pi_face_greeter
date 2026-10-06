@@ -155,6 +155,29 @@ def test_run_conversation_stops_on_empty_transcript() -> None:
     assert "Didn't catch that" in statuses
 
 
+def test_run_conversation_pauses_mic_for_chime() -> None:
+    mic = MagicMock()
+    with (
+        patch("pi_face_greeter.conversation.speak_from_config"),
+        patch("pi_face_greeter.conversation.listen_from_config", return_value=None),
+        patch("pi_face_greeter.conversation.play_chime"),
+        patch("pi_face_greeter.conversation.time.sleep"),
+    ):
+        run_conversation(
+            "Todd",
+            "Hi, Todd. How are you?",
+            mic=mic,
+            tts_cfg={"enabled": True},
+            stt_cfg={"enabled": True},
+            ollama_cfg={"enabled": True, "base_url": "http://localhost:11434", "model": "x"},
+            conversation_cfg={"enabled": True, "listen_chime": True},
+            assistant_cfg={"name": "Freyja"},
+        )
+
+    mic.pause.assert_called()
+    mic.resume.assert_called()
+
+
 def test_run_conversation_emits_transcript_for_user_and_assistant() -> None:
     mic = MagicMock()
     transcript: list[tuple[str, str, bool]] = []

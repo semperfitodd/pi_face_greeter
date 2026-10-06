@@ -4,8 +4,11 @@ import logging
 import shutil
 import subprocess
 import threading
+import time
 from collections.abc import Callable, Iterator
 from queue import Empty, Queue
+
+import numpy as np
 
 from pi_face_greeter.alsa_devices import normalize_alsa_device
 
@@ -13,6 +16,9 @@ SAMPLE_RATE = 16000
 CHANNELS = 1
 SAMPLE_WIDTH = 2
 DEFAULT_FRAME_SAMPLES = 512
+_LEVEL_SMOOTHING = 0.35
+_LEVEL_REFERENCE_RMS = 4000.0
+_ALIVE_TIMEOUT_SECONDS = 1.0
 
 logger = logging.getLogger("pi_face_greeter.mic")
 
@@ -37,6 +43,31 @@ class MicStream:
         self._thread: threading.Thread | None = None
         self._proc: subprocess.Popen[bytes] | None = None
         self._running = False
+        self._metrics_lock = threading.Lock()
+        self._level = 0.0
+        self._last_frame_at = 0.0
+        self._active_device: str | None = alsa_device
+
+    @property
+    def device(self) -> str | None:
+        return self._active_device or self._configured_device
+
+    @property
+    def level(self) -> float:
+        with self._metrics_lock:
+            return self._level
+
+    @property
+    def is_alive(self) -> bool:
+        if not self._running:
+            return False
+        proc = self._proc
+        if proc is not None and proc.poll() is not None:
+            return False
+        with self._metrics_lock:
+            if self._last_frame_at <= 0:
+                return False
+            return (time.monotonic() - self._last_frame_at) < _ALIVE_TIMEOUT_SECONDS
 
     @property
     def frame_samples(self) -> int:
@@ -106,6 +137,16 @@ class MicStream:
         finally:
             self.unsubscribe(_enqueue)
 
+    def _update_level(self, frame: bytes) -> None:
+        samples = np.frombuffer(frame, dtype=np.int16)
+        if samples.size == 0:
+            return
+        rms = float(np.sqrt(np.mean(samples.astype(np.float32) ** 2)))
+        instant = min(1.0, rms / _LEVEL_REFERENCE_RMS)
+        with self._metrics_lock:
+            self._level = self._level * (1.0 - _LEVEL_SMOOTHING) + instant * _LEVEL_SMOOTHING
+            self._last_frame_at = time.monotonic()
+
     def _emit(self, frame: bytes) -> None:
         if self._paused:
             return
@@ -134,6 +175,7 @@ class MicStream:
             "raw",
         ]
         alsa = normalize_alsa_device(device)
+        self._active_device = alsa
         if alsa:
             command.extend(["-D", alsa])
 
@@ -159,6 +201,7 @@ class MicStream:
                 break
             if len(chunk) < self._frame_bytes:
                 continue
+            self._update_level(chunk)
             self._emit(chunk)
 
         proc = self._proc

@@ -316,9 +316,14 @@ def run_conversation(
             break
 
         if listen_chime:
-            play_chime(tts_cfg)
+            mic.pause()
+            try:
+                play_chime(tts_cfg)
+            finally:
+                time.sleep(0.25)
+                mic.resume()
         status("Listening...")
-        user_text = listen_from_config(mic, stt_cfg)
+        user_text = listen_from_config(mic, stt_cfg, on_phase=status)
         if not user_text:
             logger.info("Conversation ended: no speech (turn %d)", turn + 1)
             status("Didn't catch that")

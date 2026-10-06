@@ -55,14 +55,10 @@ def parse_usb_playback_device(aplay_listing: str) -> str | None:
     return device_for_card(cards[0][0])
 
 
-def parse_usb_capture_device(arecord_listing: str, *, exclude_card: int | None = None) -> str | None:
+def parse_usb_capture_device(arecord_listing: str) -> str | None:
     cards = parse_usb_cards(arecord_listing)
     if not cards:
         return None
-    if exclude_card is not None and len(cards) > 1:
-        for card, _line in cards:
-            if card != exclude_card:
-                return device_for_card(card)
     return device_for_card(cards[0][0])
 
 
@@ -96,23 +92,20 @@ def detect_usb_playback_device() -> str | None:
     return device
 
 
-def detect_usb_capture_device(*, exclude_card: int | None = None) -> str | None:
+def detect_usb_capture_device() -> str | None:
     if shutil.which("arecord") is None:
         logger.debug("arecord not found; cannot detect USB capture device")
         return None
     listing = _run_list_command(["arecord", "-l"])
     if listing is None:
         return None
-    device = parse_usb_capture_device(listing, exclude_card=exclude_card)
+    cards = parse_usb_cards(listing)
+    if cards:
+        summary = ", ".join(f"card {card}: {line}" for card, line in cards)
+        logger.info("USB capture candidates: %s", summary)
+    device = parse_usb_capture_device(listing)
     if device is not None:
-        if exclude_card is not None and card_number_from_device(device) != exclude_card:
-            logger.info(
-                "Auto-selected USB capture device: %s (playback uses card %s)",
-                device,
-                exclude_card,
-            )
-        else:
-            logger.info("Auto-selected USB capture device: %s", device)
+        logger.info("Auto-selected USB capture device: %s", device)
     else:
         logger.debug("No USB capture card found in arecord -l output")
     return device
@@ -130,24 +123,11 @@ def resolve_capture_device(
     *,
     playback_device: str | None = None,
 ) -> str | None:
+    del playback_device
     explicit = normalize_alsa_device(configured)
     if explicit is not None:
         return explicit
-
-    playback_card: int | None = None
-    if playback_device is not None:
-        playback_card = card_number_from_device(playback_device)
-    else:
-        playback_card = card_number_from_device(detect_usb_playback_device())
-
-    exclude = playback_card
-    listing = _run_list_command(["arecord", "-l"]) if shutil.which("arecord") else None
-    if listing is not None:
-        capture_cards = parse_usb_cards(listing)
-        if len(capture_cards) <= 1:
-            exclude = None
-
-    return detect_usb_capture_device(exclude_card=exclude)
+    return detect_usb_capture_device()
 
 
 def resolve_audio_devices(
@@ -156,5 +136,5 @@ def resolve_audio_devices(
     capture_configured: str | None,
 ) -> tuple[str | None, str | None]:
     playback = resolve_playback_device(playback_configured)
-    capture = resolve_capture_device(capture_configured, playback_device=playback)
+    capture = resolve_capture_device(capture_configured)
     return playback, capture

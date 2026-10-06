@@ -231,7 +231,7 @@ card 1: vc4hdmi1 [vc4-hdmi-1], device 0: ...
 card 2: Device [USB PnP Audio Device], device 0: USB Audio [USB Audio]
 ```
 
-The greeter **automatically picks USB ALSA cards** when `tts.alsa_device` and `stt.alsa_device` are `null` (default). Playback uses the first USB card in `aplay -l`. Capture uses the first USB card in `arecord -l`, but if you have **separate USB speaker and mic dongles**, it prefers a capture card **different from** the playback card so the mic is not the speaker adapter.
+The greeter **automatically picks USB ALSA cards** when `tts.alsa_device` and `stt.alsa_device` are `null` (default). Playback uses the first USB card in `aplay -l`. Capture uses the **first USB card in `arecord -l`**. If you have **separate speaker and mic dongles**, set `stt.alsa_device` and `tts.alsa_device` to the card numbers that worked in your OS tests (see below). Always use **`plughw:N,0`**, not `hw:N,0`, for playback.
 
 2. Test the USB speaker manually (use the card number from your `aplay -l` line that contains `USB`):
 
@@ -241,7 +241,17 @@ speaker-test -D plughw:2,0 -c 2 -t wav
 
 Press Ctrl+C after confirming audio.
 
-3. Optional override in `config/config.yaml` (only if auto-detection is wrong):
+3. Test the mic in the OS (16 kHz mono, same as the app):
+
+```bash
+arecord -l
+arecord -D plughw:N,0 -f S16_LE -r 16000 -c 1 -d 5 /tmp/mic-test.wav
+aplay -D plughw:S,0 /tmp/mic-test.wav
+```
+
+Use **N** from `arecord -l` and **S** from `aplay -l` (often the same card on a combo dongle). If `aplay` fails with **Channels count non available**, use **`plughw`** not **`hw`**, or convert for a one-off listen test: `sox /tmp/mic-test.wav -r 48000 -c 2 /tmp/mic-play.wav`.
+
+4. Optional override in `config/config.yaml` (only if auto-detection is wrong):
 
 ```yaml
 tts:
@@ -380,7 +390,7 @@ Use `tts.engine: espeak` to force the old robotic voice. Toggle `tts.ask_how_are
 
 ### Freyja voice conversation (mic + Ollama)
 
-**Freyja** is the built-in executive assistant. The default config enables conversation: face recognized → **Hi, {name}. How are you?** → listen → local **Ollama** reply (streamed, spoken in batched chunks) → listen again. The kiosk shows a scrollable transcript in the right panel (`Todd: …`, `Freyja: …`) under the camera preview. If nothing is heard, the status shows **Didn't catch that** briefly. Cooldown only blocks repeating the face greeting; say **Hey Freyja** anytime to talk. `ollama.base_url` must be `http://localhost` or `http://127.0.0.1`.
+**Freyja** is the built-in executive assistant. The default config enables conversation: face recognized → **Hi, {name}. How are you?** → listen → local **Ollama** reply (streamed, spoken in batched chunks) → listen again. The kiosk right panel shows a **smaller square camera preview**, a **mic row** (ALSA device + live level bar), status (**Listening…** → **Hearing you…** → **Transcribing…** → **Thinking…**), and a scrollable transcript (`Todd: …`, `Freyja: …`). If nothing is heard, the status shows **Didn't catch that** briefly. Cooldown only blocks repeating the face greeting; say **Hey Freyja** anytime to talk. `ollama.base_url` must be `http://localhost` or `http://127.0.0.1`.
 
 One-time setup (included in `./scripts/setup_system.sh` and `./scripts/setup_venv.sh`):
 
@@ -411,7 +421,7 @@ tts:
     model: data/voices/en_US-lessac-high.onnx
 ```
 
-If the mic seems dead after **Listening…**, check `data/logs/greeter.log` for lines like `No speech within start timeout: frames=… peak_vad=… peak_rms=…` (low `peak_rms` → mic or ALSA device; low `peak_vad` with healthy RMS → try lowering `vad_threshold`).
+If the mic seems dead after **Listening…**, watch the **mic level bar** on the kiosk (red **Mic: no audio** = no frames from `arecord`). Check `data/logs/greeter.log` for `USB capture candidates`, `Mic stream ALSA`, and `No speech within start timeout: frames=… peak_vad=… peak_rms=…` (low `peak_rms` → wrong device or gain; low `peak_vad` with healthy RMS → try lowering `vad_threshold`).
 
 **Custom wake word:** Train `hey_freyja.onnx` with the [openWakeWord training notebook](https://github.com/dscripka/openWakeWord). Use phonetic TTS text **hey fraya** when generating training clips. Until the file exists, face greetings still work; set `wake_word.model: hey_jarvis` to try wake word immediately.
 
@@ -690,7 +700,7 @@ aplay -l
 speaker-test -D plughw:N,0 -c 2 -t wav   # N = card number of the USB line
 ```
 
-- With `tts.alsa_device` / `stt.alsa_device` null, the app picks USB cards automatically (mic avoids the playback card when two USB capture devices exist).
+- With `tts.alsa_device` / `stt.alsa_device` null, the app picks the first USB card from `aplay -l` / `arecord -l`. Pin both in config when you use separate dongles.
 - Set `tts.alsa_device` or `stt.alsa_device` only to override (e.g. `plughw:2,0`).
 - For mic issues: `arecord -l` and check logs for `Mic stream ALSA: playback=... capture=...`.
 - Confirm speaker wired to sound card header with correct polarity.

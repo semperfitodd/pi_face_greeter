@@ -7,12 +7,14 @@ from typing import Any
 
 from kivy.clock import Clock
 from kivy.graphics import Color, Rectangle
+from kivy.uix.anchorlayout import AnchorLayout
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.label import Label
 from kivy.uix.screenmanager import Screen
 from kivy.uix.scrollview import ScrollView
 
 from pi_face_greeter.app.camera_preview import CameraPreview
+from pi_face_greeter.app.mic_level_bar import MicLevelBar
 from pi_face_greeter.app.camera_source import CameraSource
 from pi_face_greeter.app.face_widget import AnimatedFace
 from pi_face_greeter.app.transcript_format import (
@@ -30,6 +32,8 @@ from pi_face_greeter.recognition import get_person_cooldown, get_person_greeting
 from pi_face_greeter.wake_word import WakeWordListener
 
 logger = logging.getLogger("pi_face_greeter.face_screen")
+
+_PREVIEW_WIDTH_RATIO = 0.75
 
 
 class _SidePanel(BoxLayout):
@@ -85,12 +89,18 @@ class FaceScreen(Screen):
         self._transcript_label: Label | None = None
         self._transcript_scroll: ScrollView | None = None
         self._transcript_turns: list[TranscriptTurn] = []
+        self._mic_label: Label | None = None
+        self._mic_level_bar: MicLevelBar | None = None
+        self._preview_host: AnchorLayout | None = None
+        self._side_panel: _SidePanel | None = None
         self._animated_face: AnimatedFace | None = None
         self._tick_event = None
+        self._mic_ui_event = None
         self._wake_listener: WakeWordListener | None = None
 
         self._build_ui()
         Clock.schedule_once(self._start_presence_watch, 0)
+        self._mic_ui_event = Clock.schedule_interval(self._update_mic_panel, 0.1)
 
         if self._mic is not None and wake_cfg is not None:
             self._wake_listener = WakeWordListener(
@@ -118,6 +128,9 @@ class FaceScreen(Screen):
         self.stop_presence_watch()
 
     def shutdown(self) -> None:
+        if self._mic_ui_event is not None:
+            self._mic_ui_event.cancel()
+            self._mic_ui_event = None
         if self._wake_listener is not None:
             self._wake_listener.stop()
 
@@ -147,13 +160,34 @@ class FaceScreen(Screen):
             padding=(8, 8, 8, 8),
             spacing=6,
         )
+        self._side_panel = side
 
+        preview_host = AnchorLayout(size_hint_y=None, anchor_x="center", anchor_y="top")
         preview = CameraPreview(
             camera_source=self.camera_source,
-            size_hint=(1, None),
+            size_hint=(None, None),
         )
-        preview.bind(width=lambda inst, w: setattr(inst, "height", w))
-        side.add_widget(preview)
+        preview_host.add_widget(preview)
+        self._preview_host = preview_host
+        side.bind(width=self._sync_preview_size)
+        side.add_widget(preview_host)
+
+        mic_row = BoxLayout(size_hint_y=None, height=22, spacing=6)
+        mic_label = Label(
+            text="Mic",
+            size_hint_x=None,
+            width=120,
+            halign="left",
+            valign="middle",
+            color=(0.75, 0.75, 0.75, 1),
+        )
+        mic_label.bind(size=lambda inst, _val: setattr(inst, "text_size", (inst.width, None)))
+        self._mic_label = mic_label
+        mic_bar = MicLevelBar(size_hint_x=1, height=14)
+        self._mic_level_bar = mic_bar
+        mic_row.add_widget(mic_label)
+        mic_row.add_widget(mic_bar)
+        side.add_widget(mic_row)
 
         status = Label(
             text="",
@@ -200,6 +234,40 @@ class FaceScreen(Screen):
 
         root.add_widget(side)
         self.add_widget(root)
+        Clock.schedule_once(lambda _dt: self._sync_preview_size(side), 0)
+
+    def _sync_preview_size(self, *_args) -> None:
+        side = self._side_panel
+        host = self._preview_host
+        if side is None or host is None or side.width <= 0:
+            return
+        inner = side.width - side.padding[0] - side.padding[2]
+        size = max(1, inner * _PREVIEW_WIDTH_RATIO)
+        host.height = size
+        for child in host.children:
+            if isinstance(child, CameraPreview):
+                child.size = (size, size)
+
+    def _update_mic_panel(self, _dt) -> None:
+        mic = self._mic
+        label = self._mic_label
+        bar = self._mic_level_bar
+        if label is None or bar is None:
+            return
+        if mic is None:
+            label.text = "Mic: off"
+            label.color = (0.6, 0.6, 0.6, 1)
+            bar.set_level(0.0)
+            return
+        device = mic.device or "default"
+        if mic.is_alive:
+            label.text = f"Mic {device}"
+            label.color = (0.75, 0.75, 0.75, 1)
+            bar.set_level(mic.level)
+        else:
+            label.text = "Mic: no audio"
+            label.color = (1.0, 0.35, 0.35, 1)
+            bar.set_level(0.0)
 
     def _tick(self, _dt) -> None:
         if self._greeting_in_progress:

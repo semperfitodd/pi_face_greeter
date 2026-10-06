@@ -73,3 +73,39 @@ def test_listen_utterance_logs_diagnostics_on_timeout(caplog) -> None:
 
     assert result is None
     assert any("peak_vad" in record.message for record in caplog.records)
+
+
+def test_listen_utterance_calls_on_phase() -> None:
+    mic = MicStream(frame_samples=512)
+    frames = [b"\x01\x00" * 512, b"\x02\x00" * 512, b"\x00\x00" * 512]
+    phases: list[str] = []
+
+    class FakeVAD:
+        def __init__(self, *_args, **_kwargs) -> None:
+            self._calls = 0
+
+        def speech_probability(self, _frame: bytes) -> float:
+            self._calls += 1
+            return 0.9 if self._calls <= 2 else 0.1
+
+    with patch("pi_face_greeter.stt.SileroVADSession", FakeVAD):
+        with patch.object(mic, "iter_frames", return_value=iter(frames)):
+            stt.listen_utterance(
+                mic,
+                {"enabled": True, "silence_seconds": 0.5},
+                on_phase=phases.append,
+            )
+
+    assert "Hearing you..." in phases
+
+
+def test_listen_once_calls_transcribing_phase() -> None:
+    mic = MagicMock(spec=MicStream)
+    phases: list[str] = []
+    with (
+        patch("pi_face_greeter.stt.listen_utterance", return_value=b"\x00" * 1024),
+        patch("pi_face_greeter.stt.transcribe_pcm", return_value="hello"),
+    ):
+        text = stt.listen_once(mic, {"enabled": True}, on_phase=phases.append)
+    assert text == "hello"
+    assert "Transcribing..." in phases

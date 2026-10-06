@@ -5,6 +5,7 @@ import tempfile
 import time
 import wave
 from pathlib import Path
+from collections.abc import Callable
 from typing import Any
 
 import numpy as np
@@ -85,7 +86,12 @@ def transcribe_pcm(
             Path(wav_path).unlink(missing_ok=True)
 
 
-def listen_utterance(mic: MicStream, stt_cfg: dict[str, Any]) -> bytes | None:
+def listen_utterance(
+    mic: MicStream,
+    stt_cfg: dict[str, Any],
+    *,
+    on_phase: Callable[[str], None] | None = None,
+) -> bytes | None:
     if not stt_cfg.get("enabled", True):
         return None
 
@@ -122,6 +128,8 @@ def listen_utterance(mic: MicStream, stt_cfg: dict[str, Any]) -> bytes | None:
         if not speech_started:
             if is_speech:
                 speech_started = True
+                if on_phase is not None:
+                    on_phase("Hearing you...")
                 chunks.append(frame)
             elif time.monotonic() > deadline:
                 logger.info(
@@ -154,15 +162,22 @@ def listen_utterance(mic: MicStream, stt_cfg: dict[str, Any]) -> bytes | None:
     return b"".join(chunks)
 
 
-def listen_once(mic: MicStream | None, stt_cfg: dict[str, Any]) -> str | None:
+def listen_once(
+    mic: MicStream | None,
+    stt_cfg: dict[str, Any],
+    *,
+    on_phase: Callable[[str], None] | None = None,
+) -> str | None:
     if mic is None:
         logger.warning("Mic stream not available for STT")
         return None
 
-    pcm = listen_utterance(mic, stt_cfg)
+    pcm = listen_utterance(mic, stt_cfg, on_phase=on_phase)
     if pcm is None:
         return None
 
+    if on_phase is not None:
+        on_phase("Transcribing...")
     text = transcribe_pcm(
         pcm,
         model_path=stt_cfg.get("model", "data/models/faster-whisper-tiny.en"),
@@ -176,9 +191,32 @@ def listen_once(mic: MicStream | None, stt_cfg: dict[str, Any]) -> str | None:
     return text or None
 
 
-def listen_from_config(mic: MicStream | None, stt_cfg: dict[str, Any]) -> str | None:
+def listen_from_config(
+    mic: MicStream | None,
+    stt_cfg: dict[str, Any],
+    *,
+    on_phase: Callable[[str], None] | None = None,
+) -> str | None:
     try:
-        return listen_once(mic, stt_cfg)
+        return listen_once(mic, stt_cfg, on_phase=on_phase)
     except Exception:
         logger.warning("Speech capture or transcription failed", exc_info=True)
         return None
+
+
+def warmup_stt(stt_cfg: dict[str, Any]) -> None:
+    if not stt_cfg.get("enabled", True):
+        return
+    started = time.monotonic()
+    model_path = stt_cfg.get("model", "data/models/faster-whisper-tiny.en")
+    compute_type = str(stt_cfg.get("compute_type", "int8"))
+    vad_model = stt_cfg.get("vad_model", "data/models/silero_vad.onnx")
+    try:
+        resolved = _resolve_model_path(model_path)
+        _load_whisper_model(resolved, compute_type)
+        SileroVADSession(vad_model)
+    except Exception:
+        logger.warning("STT warmup failed; first listen may be slow", exc_info=True)
+        return
+    elapsed = time.monotonic() - started
+    logger.info("STT warmup complete in %.1fs", elapsed)

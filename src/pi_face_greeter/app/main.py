@@ -22,6 +22,15 @@ from pi_face_greeter.settings_auth import warn_if_settings_unlocked
 logger = logging.getLogger("pi_face_greeter.app")
 
 
+def _warmup_stt_thread(stt_cfg: dict) -> None:
+    from pi_face_greeter.stt import warmup_stt
+
+    try:
+        warmup_stt(stt_cfg)
+    except Exception:
+        logger.warning("STT warmup thread failed", exc_info=True)
+
+
 def _debug_enabled(diagnostics_cfg: dict) -> bool:
     env_value = os.environ.get("PI_FACE_GREETER_DEBUG", "").strip().lower()
     if env_value in ("1", "true", "yes"):
@@ -96,6 +105,12 @@ class PiFaceGreeterApp(App):
             ).start()
 
         if conversation_enabled(conversation_cfg, ollama_cfg):
+            threading.Thread(
+                target=_warmup_stt_thread,
+                args=(stt_cfg,),
+                name="stt-warmup",
+                daemon=True,
+            ).start()
             try:
                 self._mic = create_mic_stream(stt_cfg, tts_cfg)
                 self._mic.start()
