@@ -43,8 +43,6 @@ ui:
   greet_cooldown_seconds: 30
   presence_frames_required: 5
   recognition_frames_required: 3
-  preview_width: 200
-  preview_height: 150
 
 detection:
   scale_factor: 1.05
@@ -89,8 +87,9 @@ tts:
   alsa_device: null
   voice: en
   ask_how_are_you: true
+  fallback_to_espeak: false
   piper:
-    model: data/voices/en_US-amy-medium.onnx
+    model: data/voices/en_US-lessac-high.onnx
     length_scale: 1.0
   placeholder_greeting: "Hello. Face recognition is not enabled yet."
 

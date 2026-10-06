@@ -6,14 +6,21 @@ import time
 from typing import Any
 
 from kivy.clock import Clock
-from kivy.uix.floatlayout import FloatLayout
+from kivy.graphics import Color, Rectangle
+from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.label import Label
 from kivy.uix.screenmanager import Screen
+from kivy.uix.scrollview import ScrollView
 
 from pi_face_greeter.app.camera_preview import CameraPreview
 from pi_face_greeter.app.camera_source import CameraSource
 from pi_face_greeter.app.face_widget import AnimatedFace
-from pi_face_greeter.conversation import WAKE_HINT
+from pi_face_greeter.app.transcript_format import (
+    TranscriptTurn,
+    append_or_update_turn,
+    format_transcript_markup,
+)
+from pi_face_greeter.conversation import WAKE_HINT, DEFAULT_ASSISTANT_NAME
 from pi_face_greeter.greet_pipeline import run_greeting_interaction
 from pi_face_greeter.identity_vote import PENDING, IdentityVoter
 from pi_face_greeter.mic import MicStream
@@ -23,6 +30,19 @@ from pi_face_greeter.recognition import get_person_cooldown, get_person_greeting
 from pi_face_greeter.wake_word import WakeWordListener
 
 logger = logging.getLogger("pi_face_greeter.face_screen")
+
+
+class _SidePanel(BoxLayout):
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+        with self.canvas.before:
+            Color(0.08, 0.08, 0.11, 1)
+            self._bg = Rectangle(pos=self.pos, size=self.size)
+        self.bind(pos=self._sync_bg, size=self._sync_bg)
+
+    def _sync_bg(self, *_args) -> None:
+        self._bg.pos = self.pos
+        self._bg.size = self.size
 
 
 class FaceScreen(Screen):
@@ -47,6 +67,7 @@ class FaceScreen(Screen):
         self._conversation_cfg = conversation_cfg or {}
         self._stt_cfg = stt_cfg or {}
         self._assistant_cfg = assistant_cfg or {}
+        self._assistant_name = str(assistant_cfg.get("name", DEFAULT_ASSISTANT_NAME) if assistant_cfg else DEFAULT_ASSISTANT_NAME)
         self._mic = mic
         self._pending_cooldown_key: str | None = None
         self._last_face_seen = 0.0
@@ -61,6 +82,9 @@ class FaceScreen(Screen):
         self._consecutive_face_frames = 0
         self._greeting_in_progress = False
         self._status_label: Label | None = None
+        self._transcript_label: Label | None = None
+        self._transcript_scroll: ScrollView | None = None
+        self._transcript_turns: list[TranscriptTurn] = []
         self._animated_face: AnimatedFace | None = None
         self._tick_event = None
         self._wake_listener: WakeWordListener | None = None
@@ -107,45 +131,74 @@ class FaceScreen(Screen):
         return time.monotonic() - self._last_face_seen < self._presence_grace
 
     def _build_ui(self) -> None:
-        root = FloatLayout()
+        root = BoxLayout(orientation="horizontal", spacing=0, padding=0)
 
         face = AnimatedFace(
             blink_interval_min=float(self.ui_cfg.get("blink_interval_min", 2.0)),
             blink_interval_max=float(self.ui_cfg.get("blink_interval_max", 6.0)),
-            size_hint=(1, 1),
+            size_hint_x=2 / 3,
         )
         self._animated_face = face
         root.add_widget(face)
 
-        preview_width = int(self.ui_cfg.get("preview_width", 200))
-        preview_height = int(self.ui_cfg.get("preview_height", 150))
+        side = _SidePanel(
+            orientation="vertical",
+            size_hint_x=1 / 3,
+            padding=(8, 8, 8, 8),
+            spacing=6,
+        )
+
         preview = CameraPreview(
             camera_source=self.camera_source,
-            size_hint=(None, None),
-            size=(preview_width, preview_height),
-            pos_hint={"x": 0.02, "top": 0.98},
+            size_hint=(1, None),
         )
-        root.add_widget(preview)
+        preview.bind(width=lambda inst, w: setattr(inst, "height", w))
+        side.add_widget(preview)
 
         status = Label(
             text="",
-            size_hint=(1, None),
-            height=32,
-            pos_hint={"center_x": 0.5, "y": 0.02},
+            size_hint_y=None,
+            height=28,
             color=(0.9, 0.9, 0.9, 1),
+            halign="left",
+            valign="middle",
         )
+        status.bind(size=lambda inst, _val: setattr(inst, "text_size", (inst.width, None)))
         self._status_label = status
-        root.add_widget(status)
+        side.add_widget(status)
+
+        scroll = ScrollView(
+            size_hint=(1, 1),
+            do_scroll_x=False,
+            do_scroll_y=True,
+        )
+        transcript = Label(
+            text="",
+            markup=True,
+            size_hint_y=None,
+            color=(0.85, 0.85, 0.85, 1),
+            halign="left",
+            valign="top",
+        )
+        transcript.bind(
+            width=lambda inst, w: setattr(inst, "text_size", (w, None)),
+            texture_size=lambda inst, ts: setattr(inst, "height", ts[1]),
+        )
+        self._transcript_label = transcript
+        scroll.add_widget(transcript)
+        self._transcript_scroll = scroll
+        side.add_widget(scroll)
 
         hint = Label(
             text="Swipe left for settings",
-            size_hint=(None, None),
-            size=(220, 24),
-            pos_hint={"right": 0.98, "y": 0.02},
+            size_hint_y=None,
+            height=22,
             color=(0.6, 0.6, 0.6, 1),
+            halign="center",
         )
-        root.add_widget(hint)
+        side.add_widget(hint)
 
+        root.add_widget(side)
         self.add_widget(root)
 
     def _tick(self, _dt) -> None:
@@ -221,6 +274,7 @@ class FaceScreen(Screen):
         if self._greeting_in_progress:
             return
         self._greeting_in_progress = True
+        self._clear_transcript()
         self._pause_wake_listener()
         self._pending_cooldown_key = None
         name = self._last_confirmed_name
@@ -240,6 +294,7 @@ class FaceScreen(Screen):
 
     def _trigger_greeting(self, name: str | None, confidence: float) -> None:
         self._greeting_in_progress = True
+        self._clear_transcript()
         self._reset_presence_state()
         self._pending_cooldown_key = cooldown_key(name)
         self._pause_wake_listener()
@@ -265,10 +320,33 @@ class FaceScreen(Screen):
         if self._status_label is not None:
             self._status_label.text = text
 
-    def _on_before_speak(self, text: str) -> None:
-        Clock.schedule_once(lambda _dt: self._set_status(text), 0)
+    def _on_before_speak(self, _text: str) -> None:
         if self._animated_face is not None:
             Clock.schedule_once(lambda _dt: self._animated_face.start_talking(), 0)
+
+    def _on_transcript(self, speaker: str, text: str, replace_last: bool) -> None:
+        append_or_update_turn(
+            self._transcript_turns,
+            speaker,
+            text,
+            replace_last=replace_last,
+        )
+        Clock.schedule_once(lambda _dt: self._refresh_transcript_label(), 0)
+
+    def _refresh_transcript_label(self) -> None:
+        if self._transcript_label is None:
+            return
+        self._transcript_label.text = format_transcript_markup(
+            self._transcript_turns,
+            self._assistant_name,
+        )
+        if self._transcript_scroll is not None:
+            self._transcript_scroll.scroll_y = 0
+
+    def _clear_transcript(self) -> None:
+        self._transcript_turns.clear()
+        if self._transcript_label is not None:
+            self._transcript_label.text = ""
 
     def _on_after_speak(self) -> None:
         if self._animated_face is not None:
@@ -295,6 +373,7 @@ class FaceScreen(Screen):
                 assistant_cfg=self._assistant_cfg,
                 custom_greeting=custom_greeting,
                 on_status=self._on_status,
+                on_transcript=self._on_transcript,
                 on_before_speak=self._on_before_speak,
                 on_after_speak=self._on_after_speak,
                 mic=self._mic,
@@ -311,6 +390,8 @@ class FaceScreen(Screen):
     def _finish_greeting(self, _dt) -> None:
         if self._animated_face is not None:
             self._animated_face.stop_talking()
+        if self._status_label is not None:
+            self._status_label.text = ""
         if self._pending_cooldown_key is not None:
             self._cooldown.mark_triggered(self._pending_cooldown_key)
             self._pending_cooldown_key = None

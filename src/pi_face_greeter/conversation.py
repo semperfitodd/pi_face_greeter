@@ -132,6 +132,25 @@ def _is_goodbye(text: str) -> bool:
     return bool(_GOODBYE_PATTERN.search(text))
 
 
+def iter_speech_chunks_from_sentences(
+    sentences: Iterator[str],
+) -> Iterator[tuple[str, list[str]]]:
+    """Batch sentences for TTS: first sentence immediately, then pairs."""
+    pending: list[str] = []
+    first_emitted = False
+    for sentence in sentences:
+        if not first_emitted:
+            yield sentence, [sentence]
+            first_emitted = True
+            continue
+        pending.append(sentence)
+        if len(pending) >= 2:
+            yield " ".join(pending), list(pending)
+            pending = []
+    if pending:
+        yield " ".join(pending), list(pending)
+
+
 def iter_sentences_from_tokens(tokens: Iterator[str]) -> Iterator[str]:
     buffer = ""
     for token in tokens:
@@ -158,7 +177,9 @@ def _speak_streamed_reply(
     keep_alive: str | None,
     tts_cfg: dict[str, Any],
     mic: MicStream | None,
+    assistant_name: str,
     on_status: Callable[[str], None] | None,
+    on_transcript: Callable[[str, str, bool], None] | None,
     on_before_speak: Callable[[str], None] | None,
     on_after_speak: Callable[[], None] | None,
 ) -> str:
@@ -172,8 +193,7 @@ def _speak_streamed_reply(
         keep_alive=keep_alive,
     )
     sentence_queue: queue.Queue[str | None] = queue.Queue()
-    spoken_parts: list[str] = []
-    display = ""
+    reply_sentences: list[str] = []
 
     def speaker_worker() -> None:
         while True:
@@ -200,17 +220,18 @@ def _speak_streamed_reply(
     worker.start()
 
     try:
-        for sentence in iter_sentences_from_tokens(token_iter):
-            display = _sanitize_reply(" ".join([*spoken_parts, sentence]).strip())
-            if on_status is not None and display:
-                on_status(display)
-            spoken_parts.append(sentence)
-            sentence_queue.put(sentence)
+        sentence_iter = iter_sentences_from_tokens(token_iter)
+        for chunk_text, sentences in iter_speech_chunks_from_sentences(sentence_iter):
+            reply_sentences.extend(sentences)
+            display = _sanitize_reply(" ".join(reply_sentences).strip())
+            if on_transcript is not None and display:
+                on_transcript(assistant_name, display, True)
+            sentence_queue.put(chunk_text)
     finally:
         sentence_queue.put(None)
         worker.join(timeout=120)
 
-    full_reply = _sanitize_reply(" ".join(spoken_parts).strip())
+    full_reply = _sanitize_reply(" ".join(reply_sentences).strip())
     if not full_reply:
         raise RuntimeError("Ollama chat reply empty after sanitization")
     return full_reply
@@ -227,6 +248,7 @@ def run_conversation(
     conversation_cfg: dict[str, Any],
     assistant_cfg: dict[str, Any],
     on_status: Callable[[str], None] | None = None,
+    on_transcript: Callable[[str, str, bool], None] | None = None,
     on_before_speak: Callable[[str], None] | None = None,
     on_after_speak: Callable[[], None] | None = None,
     skip_opener: bool = False,
@@ -255,6 +277,9 @@ def run_conversation(
     temperature = float(conversation_cfg.get("temperature", ollama_cfg.get("temperature", 0.7)))
     listen_chime = bool(conversation_cfg.get("listen_chime", True))
 
+    assistant_name = str(assistant_cfg.get("name", DEFAULT_ASSISTANT_NAME))
+    user_label = name if name else "Guest"
+
     system_prompt = build_system_prompt(name, assistant_cfg=assistant_cfg, now=now)
     messages: list[dict[str, str]] = [{"role": "system", "content": system_prompt}]
     if not skip_opener and opener:
@@ -264,7 +289,11 @@ def run_conversation(
         if on_status is not None:
             on_status(text)
 
-    def speak_line(text: str) -> None:
+    def transcript(speaker: str, text: str, *, replace_last: bool = False) -> None:
+        if on_transcript is not None:
+            on_transcript(speaker, text, replace_last)
+
+    def speak_line(text: str, *, speaker: str | None = None) -> None:
         mic.pause()
         try:
             if on_before_speak is not None:
@@ -275,9 +304,11 @@ def run_conversation(
                 on_after_speak()
             time.sleep(0.25)
             mic.resume()
+        if speaker is not None:
+            transcript(speaker, text, replace_last=False)
 
     if not skip_opener and opener:
-        speak_line(opener)
+        speak_line(opener, speaker=assistant_name)
 
     for turn in range(max_turns):
         if require_presence and is_present is not None and not is_present():
@@ -290,9 +321,12 @@ def run_conversation(
         user_text = listen_from_config(mic, stt_cfg)
         if not user_text:
             logger.info("Conversation ended: no speech (turn %d)", turn + 1)
+            status("Didn't catch that")
+            time.sleep(2.0)
             break
 
         logger.info("User said: %s", user_text[:120])
+        transcript(user_label, user_text, replace_last=False)
         messages.append({"role": "user", "content": user_text})
 
         if _is_goodbye(user_text):
@@ -309,7 +343,9 @@ def run_conversation(
                 keep_alive=keep_alive,
                 tts_cfg=tts_cfg,
                 mic=mic,
+                assistant_name=assistant_name,
                 on_status=status,
+                on_transcript=on_transcript,
                 on_before_speak=on_before_speak,
                 on_after_speak=on_after_speak,
             )
@@ -318,7 +354,7 @@ def run_conversation(
             break
 
         messages.append({"role": "assistant", "content": reply})
-        status(reply)
+        status("")
 
     status("")
 

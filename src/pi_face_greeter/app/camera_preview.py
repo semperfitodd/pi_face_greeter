@@ -6,6 +6,7 @@ from kivy.graphics.texture import Texture
 from kivy.uix.widget import Widget
 
 from pi_face_greeter.app.camera_source import CameraSource
+from pi_face_greeter.app.preview_geometry import kivy_tex_coords, map_box_to_widget
 
 
 class CameraPreview(Widget):
@@ -13,6 +14,7 @@ class CameraPreview(Widget):
         super().__init__(**kwargs)
         self.camera_source = camera_source
         self._texture: Texture | None = None
+        self._frame_size: tuple[int, int] | None = None
         self._update_event = Clock.schedule_interval(self._update_preview, 1 / 15)
 
     def on_parent(self, _widget, parent) -> None:
@@ -27,9 +29,10 @@ class CameraPreview(Widget):
 
         frame = snapshot.frame
         height, width = frame.shape[:2]
-        if self._texture is None or self._texture.size != (width, height):
+        if self._texture is None or self._frame_size != (width, height):
             self._texture = Texture.create(size=(width, height), colorfmt="rgb")
             self._texture.flip_vertical()
+            self._frame_size = (width, height)
 
         self._texture.blit_buffer(frame.tobytes(), colorfmt="rgb", bufferfmt="ubyte")
         self._redraw(snapshot.boxes, width, height)
@@ -39,24 +42,36 @@ class CameraPreview(Widget):
         if self._texture is None or self.width <= 0 or self.height <= 0:
             return
 
+        tex_coords = kivy_tex_coords(frame_width, frame_height)
+
         with self.canvas:
             Color(0.1, 0.1, 0.1, 1)
             Rectangle(pos=self.pos, size=self.size)
 
             Color(1, 1, 1, 1)
-            Rectangle(texture=self._texture, pos=self.pos, size=self.size)
-
-            scale_x = self.width / frame_width
-            scale_y = self.height / frame_height
+            Rectangle(
+                texture=self._texture,
+                pos=self.pos,
+                size=self.size,
+                tex_coords=tex_coords,
+            )
 
             Color(1, 0.85, 0, 1)
             line_width = max(1.5, min(self.width, self.height) * 0.015)
-            for x, y, w, h in boxes:
-                left = self.x + x * scale_x
-                bottom = self.y + (frame_height - y - h) * scale_y
-                right = left + w * scale_x
-                top = bottom + h * scale_y
+            for box in boxes:
+                mapped = map_box_to_widget(
+                    box,
+                    frame_width=frame_width,
+                    frame_height=frame_height,
+                    widget_width=self.width,
+                    widget_height=self.height,
+                )
+                if mapped is None:
+                    continue
+                left, bottom, rect_w, rect_h = mapped
+                left += self.x
+                bottom += self.y
                 Line(
-                    rectangle=(left, bottom, right - left, top - bottom),
+                    rectangle=(left, bottom, rect_w, rect_h),
                     width=line_width,
                 )

@@ -141,7 +141,7 @@ class MicStream:
             self._proc = subprocess.Popen(
                 command,
                 stdout=subprocess.PIPE,
-                stderr=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
             )
         except OSError:
             logger.exception("Failed to start arecord")
@@ -161,8 +161,13 @@ class MicStream:
                 continue
             self._emit(chunk)
 
-        if self._proc.poll() is None:
-            self._proc.terminate()
+        proc = self._proc
+        if proc is not None and proc.stderr is not None:
+            err = proc.stderr.read().decode("utf-8", errors="replace").strip()
+            if err:
+                logger.error("arecord exited: %s", err)
+        if proc is not None and proc.poll() is None:
+            proc.terminate()
 
 
 def create_mic_stream(stt_cfg: dict, tts_cfg: dict | None = None) -> MicStream:

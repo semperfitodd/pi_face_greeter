@@ -114,7 +114,25 @@ def test_speak_from_config_uses_piper() -> None:
     mock_speak.assert_not_called()
 
 
-def test_speak_from_config_falls_back_to_espeak() -> None:
+def test_speak_from_config_raises_when_piper_fails_and_no_fallback() -> None:
+    with (
+        patch("pi_face_greeter.tts.speak_piper", side_effect=RuntimeError("missing model")),
+        patch("pi_face_greeter.tts.speak") as mock_speak,
+    ):
+        with pytest.raises(RuntimeError, match="missing model"):
+            speak_from_config(
+                "Hello",
+                {
+                    "enabled": True,
+                    "engine": "piper",
+                    "fallback_to_espeak": False,
+                    "piper": {"model": "missing.onnx"},
+                },
+            )
+    mock_speak.assert_not_called()
+
+
+def test_speak_from_config_falls_back_to_espeak_when_enabled() -> None:
     with (
         patch("pi_face_greeter.tts.speak_piper", side_effect=RuntimeError("missing model")),
         patch("pi_face_greeter.tts.speak") as mock_speak,
@@ -125,6 +143,7 @@ def test_speak_from_config_falls_back_to_espeak() -> None:
             {
                 "enabled": True,
                 "engine": "piper",
+                "fallback_to_espeak": True,
                 "voice": "en",
                 "alsa_device": None,
                 "piper": {"model": "missing.onnx"},

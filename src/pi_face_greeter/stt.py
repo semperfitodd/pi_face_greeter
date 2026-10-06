@@ -99,17 +99,24 @@ def listen_utterance(mic: MicStream, stt_cfg: dict[str, Any]) -> bytes | None:
     chunks: list[bytes] = []
     speech_started = False
     silence_elapsed = 0.0
-    total_elapsed = 0.0
     frame_duration = mic.frame_samples / SAMPLE_RATE
     deadline = time.monotonic() + start_timeout
     max_deadline = time.monotonic() + max_record_seconds
+    frames_seen = 0
+    peak_prob = 0.0
+    peak_rms = 0.0
 
     for frame in mic.iter_frames(timeout=0.5):
         if time.monotonic() > max_deadline:
             break
 
-        total_elapsed += frame_duration
+        frames_seen += 1
+        samples = np.frombuffer(frame, dtype=np.int16)
+        if samples.size:
+            peak_rms = max(peak_rms, float(np.sqrt(np.mean(samples.astype(np.float32) ** 2))))
+
         prob = vad.speech_probability(frame)
+        peak_prob = max(peak_prob, prob)
         is_speech = prob >= threshold
 
         if not speech_started:
@@ -117,7 +124,13 @@ def listen_utterance(mic: MicStream, stt_cfg: dict[str, Any]) -> bytes | None:
                 speech_started = True
                 chunks.append(frame)
             elif time.monotonic() > deadline:
-                logger.debug("No speech detected within start timeout (VAD)")
+                logger.info(
+                    "No speech within start timeout: frames=%d peak_vad=%.3f peak_rms=%.1f threshold=%.2f",
+                    frames_seen,
+                    peak_prob,
+                    peak_rms,
+                    threshold,
+                )
                 return None
             continue
 
@@ -130,6 +143,13 @@ def listen_utterance(mic: MicStream, stt_cfg: dict[str, Any]) -> bytes | None:
                 break
 
     if not chunks:
+        logger.info(
+            "No speech captured: frames=%d peak_vad=%.3f peak_rms=%.1f threshold=%.2f",
+            frames_seen,
+            peak_prob,
+            peak_rms,
+            threshold,
+        )
         return None
     return b"".join(chunks)
 

@@ -14,6 +14,7 @@ from pi_face_greeter.conversation import (
     conversation_enabled,
     generate_greeting,
     iter_sentences_from_tokens,
+    iter_speech_chunks_from_sentences,
     run_conversation,
     validate_ollama_base_url,
 )
@@ -97,6 +98,16 @@ def test_iter_sentences_from_tokens_splits_on_punctuation() -> None:
     assert sentences == ["Hello Todd.", "How are you?"]
 
 
+def test_iter_speech_chunks_batches_after_first_sentence() -> None:
+    sentences = iter(["One.", "Two.", "Three.", "Four."])
+    chunks = list(iter_speech_chunks_from_sentences(sentences))
+    assert chunks == [
+        ("One.", ["One."]),
+        ("Two. Three.", ["Two.", "Three."]),
+        ("Four.", ["Four."]),
+    ]
+
+
 def test_conversation_enabled_requires_both_flags() -> None:
     assert conversation_enabled({"enabled": True}, {"enabled": True}) is True
     assert conversation_enabled({"enabled": True}, {"enabled": False}) is False
@@ -119,11 +130,13 @@ def test_run_conversation_speaks_opener_only_when_disabled() -> None:
 
 def test_run_conversation_stops_on_empty_transcript() -> None:
     mic = MagicMock()
+    statuses: list[str] = []
     with (
         patch("pi_face_greeter.conversation.speak_from_config") as mock_speak,
         patch("pi_face_greeter.conversation.listen_from_config", return_value=None),
         patch("pi_face_greeter.conversation._speak_streamed_reply") as mock_stream,
         patch("pi_face_greeter.conversation.play_chime"),
+        patch("pi_face_greeter.conversation.time.sleep"),
     ):
         run_conversation(
             "Todd",
@@ -134,10 +147,41 @@ def test_run_conversation_stops_on_empty_transcript() -> None:
             ollama_cfg={"enabled": True, "base_url": "http://localhost:11434", "model": "x"},
             conversation_cfg={"enabled": True, "listen_chime": False},
             assistant_cfg={"name": "Freyja"},
+            on_status=statuses.append,
         )
 
     mock_stream.assert_not_called()
     assert mock_speak.call_count == 1
+    assert "Didn't catch that" in statuses
+
+
+def test_run_conversation_emits_transcript_for_user_and_assistant() -> None:
+    mic = MagicMock()
+    transcript: list[tuple[str, str, bool]] = []
+    with (
+        patch("pi_face_greeter.conversation.speak_from_config"),
+        patch("pi_face_greeter.conversation.listen_from_config", return_value="I'm good"),
+        patch(
+            "pi_face_greeter.conversation._speak_streamed_reply",
+            return_value="Glad to hear it.",
+        ),
+        patch("pi_face_greeter.conversation.play_chime"),
+        patch("pi_face_greeter.conversation.time.sleep"),
+    ):
+        run_conversation(
+            "Todd",
+            "Hi, Todd. How are you?",
+            mic=mic,
+            tts_cfg={"enabled": True},
+            stt_cfg={"enabled": True},
+            ollama_cfg={"enabled": True, "base_url": "http://localhost:11434", "model": "x"},
+            conversation_cfg={"enabled": True, "listen_chime": False},
+            assistant_cfg={"name": "Freyja"},
+            on_transcript=lambda speaker, text, replace: transcript.append((speaker, text, replace)),
+        )
+
+    assert ("Freyja", "Hi, Todd. How are you?", False) in transcript
+    assert ("Todd", "I'm good", False) in transcript
 
 
 def test_warmup_ollama_skips_when_disabled() -> None:

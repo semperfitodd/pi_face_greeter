@@ -42,6 +42,9 @@ def _load_ort_session(model_path: Path) -> Any:
     return session
 
 
+_CONTEXT_SAMPLES = 64
+
+
 class SileroVADSession:
     """Streaming Silero VAD with internal RNN state."""
 
@@ -50,20 +53,25 @@ class SileroVADSession:
         self._session = _load_ort_session(self._model_path)
         self._sample_rate = sample_rate
         self._state = np.zeros((2, 1, 128), dtype=np.float32)
+        self._context = np.zeros(_CONTEXT_SAMPLES, dtype=np.float32)
         self._input_name = self._session.get_inputs()[0].name
 
     def reset(self) -> None:
         self._state = np.zeros((2, 1, 128), dtype=np.float32)
+        self._context = np.zeros(_CONTEXT_SAMPLES, dtype=np.float32)
 
     def speech_probability(self, frame_pcm: bytes) -> float:
         samples = np.frombuffer(frame_pcm, dtype=np.int16).astype(np.float32) / 32768.0
         if samples.size == 0:
             return 0.0
 
+        window = np.concatenate([self._context, samples])
+        self._context = samples[-_CONTEXT_SAMPLES:].copy()
+
         inputs: dict[str, Any] = {
-            self._input_name: samples.reshape(1, -1),
+            self._input_name: window.reshape(1, -1),
             "state": self._state,
-            "sr": np.array([self._sample_rate], dtype=np.int64),
+            "sr": np.int64(self._sample_rate),
         }
         outputs = self._session.run(None, inputs)
         if len(outputs) >= 2:

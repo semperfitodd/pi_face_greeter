@@ -341,7 +341,7 @@ Primary experience on the Hosyond 5" DSI touchscreen:
 
 Or, with the venv already active: `pi-face-greeter-app`.
 
-- **Face screen (default):** Animated face with random blinking eyes and moving mouth during speech. Live camera preview in the upper-left corner; yellow box on detected faces. Greets recognized people with **Hi, \<name\>. How are you?** (or a custom `greeting:` from `people.yaml`). With voice conversation enabled, **Freyja** listens and replies through the local Ollama model. During greet cooldown, say **Hey Freyja** to start talking again.
+- **Face screen (default):** Split layout — animated face on the left (two-thirds of the screen); on the right, a square live camera preview (center-cropped, yellow boxes on faces), a status line (**Listening…**, **Thinking…**), and a scrollable conversation log (**Name:** / **Freyja:**). Greets recognized people with **Hi, \<name\>. How are you?** (or a custom `greeting:` from `people.yaml`). With voice conversation enabled, **Freyja** listens and replies through the local Ollama model. During greet cooldown, say **Hey Freyja** to start talking again.
 - **Settings screen:** Swipe left. Add, list, edit, and delete faces. **Add Face** captures photos from the live camera (same `CameraSource` as the face screen), computes face embeddings, and reloads recognition without restarting the app.
 
 On Mac for UI development, set `camera.backend: opencv` in `config/config.yaml` and install dev deps: `pip install -e ".[dev]"`.
@@ -365,7 +365,7 @@ people:
 
 ### Natural voice (Piper)
 
-The kiosk uses **Piper** neural TTS by default (`tts.engine: piper`) for a natural US female voice (`en_US-amy-medium`). espeak-ng is kept as an automatic fallback if Piper or the voice model is missing.
+The kiosk uses **Piper** neural TTS by default (`tts.engine: piper`) with **`en_US-lessac-high`** (natural US female). Set `tts.fallback_to_espeak: true` only if you want espeak-ng when Piper fails; the default is `false` so a missing model surfaces as an error instead of a robotic voice.
 
 One-time setup on the Pi (included in `./scripts/setup_venv.sh`):
 
@@ -380,7 +380,7 @@ Use `tts.engine: espeak` to force the old robotic voice. Toggle `tts.ask_how_are
 
 ### Freyja voice conversation (mic + Ollama)
 
-**Freyja** is the built-in executive assistant. The default config enables conversation: face recognized → **Hi, {name}. How are you?** → listen → local **Ollama** reply (streamed sentence-by-sentence) → listen again. Cooldown only blocks repeating the face greeting; say **Hey Freyja** anytime to talk. `ollama.base_url` must be `http://localhost` or `http://127.0.0.1`.
+**Freyja** is the built-in executive assistant. The default config enables conversation: face recognized → **Hi, {name}. How are you?** → listen → local **Ollama** reply (streamed, spoken in batched chunks) → listen again. The kiosk shows a scrollable transcript in the right panel (`Todd: …`, `Freyja: …`) under the camera preview. If nothing is heard, the status shows **Didn't catch that** briefly. Cooldown only blocks repeating the face greeting; say **Hey Freyja** anytime to talk. `ollama.base_url` must be `http://localhost` or `http://127.0.0.1`.
 
 One-time setup (included in `./scripts/setup_system.sh` and `./scripts/setup_venv.sh`):
 
@@ -405,7 +405,13 @@ wake_word:
 stt:
   alsa_device: null   # override only if auto-detect picks the wrong dongle
   vad_threshold: 0.5
+tts:
+  fallback_to_espeak: false
+  piper:
+    model: data/voices/en_US-lessac-high.onnx
 ```
+
+If the mic seems dead after **Listening…**, check `data/logs/greeter.log` for lines like `No speech within start timeout: frames=… peak_vad=… peak_rms=…` (low `peak_rms` → mic or ALSA device; low `peak_vad` with healthy RMS → try lowering `vad_threshold`).
 
 **Custom wake word:** Train `hey_freyja.onnx` with the [openWakeWord training notebook](https://github.com/dscripka/openWakeWord). Use phonetic TTS text **hey fraya** when generating training clips. Until the file exists, face greetings still work; set `wake_word.model: hey_jarvis` to try wake word immediately.
 

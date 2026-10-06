@@ -47,3 +47,29 @@ def test_listen_once_returns_none_when_no_speech() -> None:
     mic = MagicMock(spec=MicStream)
     with patch("pi_face_greeter.stt.listen_utterance", return_value=None):
         assert stt.listen_once(mic, {"enabled": True}) is None
+
+
+def test_listen_utterance_logs_diagnostics_on_timeout(caplog) -> None:
+    import logging
+
+    mic = MicStream(frame_samples=512)
+    caplog.set_level(logging.INFO, logger="pi_face_greeter.stt")
+
+    class QuietVAD:
+        def __init__(self, *_args, **_kwargs) -> None:
+            pass
+
+        def speech_probability(self, _frame: bytes) -> float:
+            return 0.01
+
+    with patch("pi_face_greeter.stt.SileroVADSession", QuietVAD):
+        with patch.object(mic, "iter_frames", return_value=iter([b"\x00\x00" * 512])):
+            with patch("pi_face_greeter.stt.time.monotonic") as mock_mono:
+                mock_mono.side_effect = [0.0, 0.0, 0.0, 10.0]
+                result = stt.listen_utterance(
+                    mic,
+                    {"enabled": True, "start_timeout_seconds": 1.0, "vad_threshold": 0.5},
+                )
+
+    assert result is None
+    assert any("peak_vad" in record.message for record in caplog.records)

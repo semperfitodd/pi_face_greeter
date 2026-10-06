@@ -17,8 +17,8 @@ pip install -e ".[stt]" || {
 }
 
 VOICE_DIR="$PROJECT_ROOT/data/voices"
-PIPER_MODEL_NAME="${PIPER_MODEL_NAME:-en_US-amy-medium}"
-PIPER_BASE_URL="https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/amy/medium"
+PIPER_MODEL_NAME="${PIPER_MODEL_NAME:-en_US-lessac-high}"
+PIPER_BASE_URL="https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/high"
 OLLAMA_MODEL="${OLLAMA_MODEL:-llama3.2:1b}"
 
 mkdir -p "$VOICE_DIR"

@@ -161,12 +161,14 @@ def speak_from_config(text: str, tts_cfg: dict[str, Any]) -> None:
         try:
             speak_piper(
                 text=text,
-                model_path=piper_cfg.get("model", "data/voices/en_US-amy-medium.onnx"),
+                model_path=piper_cfg.get("model", "data/voices/en_US-lessac-high.onnx"),
                 alsa_device=alsa_device,
                 length_scale=float(piper_cfg.get("length_scale", 1.0)),
             )
             return
         except Exception:
-            logger.warning("Piper TTS failed; falling back to espeak-ng", exc_info=True)
+            logger.error("Piper TTS failed (engine=piper)", exc_info=True)
+            if not tts_cfg.get("fallback_to_espeak", False):
+                raise
 
     speak(text=text, voice=espeak_voice, alsa_device=alsa_device)

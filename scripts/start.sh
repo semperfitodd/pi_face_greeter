@@ -5,7 +5,7 @@ PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$PROJECT_ROOT"
 
 OLLAMA_MODEL="${OLLAMA_MODEL:-llama3.2:1b}"
-PIPER_MODEL="${PIPER_MODEL_NAME:-en_US-amy-medium}"
+PIPER_MODEL="${PIPER_MODEL_NAME:-en_US-lessac-high}"
 WHISPER_MODEL_DIR="$PROJECT_ROOT/data/models/faster-whisper-tiny.en"
 VAD_MODEL="$PROJECT_ROOT/data/models/silero_vad.onnx"
 
@@ -82,6 +82,17 @@ config_path = Path("config/config.yaml")
 config = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
 ollama_enabled = bool(config.get("ollama", {}).get("enabled", False))
 conversation_enabled = bool(config.get("conversation", {}).get("enabled", False))
+tts_cfg = config.get("tts", {}) or {}
+if str(tts_cfg.get("engine", "piper")) == "piper":
+    piper_model = (tts_cfg.get("piper") or {}).get("model", "data/voices/en_US-lessac-high.onnx")
+    model_path = Path(piper_model)
+    if not model_path.is_absolute():
+        model_path = Path.cwd() / model_path
+    if not model_path.is_file():
+        raise SystemExit(
+            f"Piper voice model missing: {model_path}\n"
+            "Run ./scripts/setup_venv.sh to download en_US-lessac-high."
+        )
 if not ollama_enabled:
     print(
         "Warning: ollama.enabled is false in config/config.yaml; "
